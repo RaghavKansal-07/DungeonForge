@@ -10,6 +10,7 @@
 #include "save.h"
 #include "events.h"
 #include "behavior.h"
+#include "audio.h"
 #include "raylib.h"
 
 #include <stddef.h>
@@ -29,70 +30,71 @@ static Dungeon dungeon;
 static bool dungeon_debug_enabled = false;
 static bool pathfinding_debug_enabled = false;
 
+/*
+ * ============================================================
+ * UI CONSTANTS
+ * ============================================================
+ */
+
+#define UI_FOOTER_HEIGHT       34
+
+#define UI_PANEL_ROUNDNESS     0.16f
+#define UI_PANEL_SEGMENTS      8
+
+#define UI_GOLD                (Color){255, 210, 60, 255}
+#define UI_GOLD_SOFT           (Color){255, 210, 60, 155}
+
+#define UI_PANEL_BG            (Color){7, 9, 13, 238}
+#define UI_PANEL_BG_DARK       (Color){4, 6, 9, 248}
+
+#define UI_TEXT                (Color){240, 242, 247, 255}
+#define UI_TEXT_DIM            (Color){145, 153, 168, 255}
+
+#define UI_HP_GREEN            (Color){45, 220, 90, 255}
+#define UI_HP_ORANGE           (Color){255, 165, 55, 255}
+#define UI_HP_RED              (Color){235, 55, 65, 255}
+
+#define UI_BOSS_RED            (Color){205, 35, 55, 255}
+#define UI_BOSS_ORANGE         (Color){245, 135, 35, 255}
+#define UI_BOSS_PURPLE         (Color){165, 80, 245, 255}
+
+#define UI_CYAN                (Color){80, 200, 255, 255}
+
+#define UI_GREEN               (Color){55, 220, 105, 255}
+
+#define UI_SHADOW              (Color){0, 0, 0, 150}
 
 /*
- * ------------------------------------------------------------
+ * ============================================================
  * GAME ACCESS
- * ------------------------------------------------------------
- *
- * Provides controlled access to the currently active
- * dungeon for systems such as save/load.
+ * ============================================================
  */
+
 Dungeon *Game_GetDungeon(void)
 {
     return &dungeon;
 }
 
-
 /*
- * ------------------------------------------------------------
+ * ============================================================
  * START NEW RUN
- * ------------------------------------------------------------
+ * ============================================================
  */
+
 static void Game_StartRun(void)
 {
-    /*
-     * Generate the procedural dungeon.
-     *
-     * The seed controls the dungeon layout.
-     * Using the same seed produces the same
-     * dungeon.
-     */
     Dungeon_Init(
         &dungeon,
-        12345
-    );
+        12345);
 
-    /*
-     * Reset player state and inventory.
-     */
     Player_Init();
 
-    /*
-     * Reset all world item drops.
-     */
     ItemDrop_Init();
 
-    /*
-     * Reset the event queue.
-     *
-     * A new run must not contain events
-     * left over from the previous run.
-     */
     Events_Clear();
 
-    /*
-     * Reset the player's behavioral profile.
-     *
-     * Every dungeon run starts with no
-     * previous behavioral knowledge.
-     */
     Behavior_Init();
 
-    /*
-     * Place the player at the center of
-     * the first generated dungeon room.
-     */
     float spawn_x = 0.0f;
     float spawn_y = 0.0f;
 
@@ -103,8 +105,7 @@ static void Game_StartRun(void)
     {
         Player_SetPosition(
             spawn_x,
-            spawn_y
-        );
+            spawn_y);
     }
 
     Enemy_Init();
@@ -113,35 +114,30 @@ static void Game_StartRun(void)
         GAME_STATE_PLAYING;
 }
 
-
 void Game_Init(void)
 {
     InitWindow(
         1280,
         720,
-        "DungeonForge"
-    );
+        "DungeonForge");
 
     SetTargetFPS(60);
 
     /*
-     * Initialize the event system before
-     * gameplay starts.
+     * Initialize game audio after the
+     * raylib window/context has been created.
+     *
+     * If audio initialization fails, the game
+     * can still continue without sound.
      */
+    Audio_Init();
+
     Events_Init();
 
-    /*
-     * Initialize a fresh behavior profile.
-     *
-     * Game_StartRun() also resets it so that
-     * restarting creates a completely fresh
-     * behavioral profile.
-     */
     Behavior_Init();
 
     Game_StartRun();
 }
-
 
 void Game_Update(void)
 {
@@ -166,10 +162,7 @@ void Game_Update(void)
     }
 
     /*
-     * Save the current game.
-     *
-     * F6 writes the current player,
-     * enemy, inventory and item-drop state.
+     * Save current game.
      */
     if (IsKeyPressed(KEY_F6))
     {
@@ -177,28 +170,14 @@ void Game_Update(void)
     }
 
     /*
-     * Load the previously saved game.
-     *
-     * F7 restores the saved game state.
+     * Load previous game.
      */
     if (IsKeyPressed(KEY_F7))
     {
         if (Load_Game())
         {
-            /*
-             * Events generated before loading
-             * should not affect the newly restored
-             * game state.
-             */
             Events_Clear();
 
-            /*
-             * The current save format does not yet
-             * serialize behavioral statistics.
-             *
-             * Therefore the behavior profile is
-             * intentionally reset after loading.
-             */
             Behavior_Init();
 
             game_state =
@@ -223,97 +202,42 @@ void Game_Update(void)
     }
 
     /*
-     * --------------------------------------------------------
+     * ========================================================
      * NORMAL GAMEPLAY
-     * --------------------------------------------------------
+     * ========================================================
      */
 
-    /*
-     * Player actions generate gameplay events.
-     */
     Player_Update();
 
-    /*
-     * Check whether the player died
-     * during Player_Update().
-     */
     if (Player_IsDead())
     {
         game_state =
             GAME_STATE_DEAD;
 
-        /*
-         * Process events generated before death.
-         */
         Behavior_Update();
 
         return;
     }
 
-    /*
-     * Update enemies.
-     *
-     * Enemy actions can also generate events
-     * such as PLAYER_DAMAGE.
-     */
     Enemy_Update();
 
-    /*
-     * An enemy attack may have killed
-     * the player during Enemy_Update().
-     */
     if (Player_IsDead())
     {
         game_state =
             GAME_STATE_DEAD;
 
-        /*
-         * Process events generated during
-         * this gameplay frame.
-         */
         Behavior_Update();
 
         return;
     }
 
-    /*
-     * Update world item drops.
-     *
-     * This checks whether the player is
-     * close enough to pick up an item.
-     */
     ItemDrop_Update();
 
-    /*
-     * --------------------------------------------------------
-     * BEHAVIOR ANALYSIS
-     * --------------------------------------------------------
-     *
-     * All gameplay events generated during this
-     * update are now consumed by the behavior analyzer.
-     *
-     * Example:
-     *
-     *     Player moves left
-     *            ↓
-     *     EVENT_PLAYER_MOVE
-     *            ↓
-     *     Events queue
-     *            ↓
-     *     Behavior_Update()
-     *            ↓
-     *     move_left_count++
-     */
     Behavior_Update();
 
     /*
-     * Check whether the dungeon has been
-     * completely cleared.
-     *
-     * Victory requires:
-     *
-     *     1. No active enemies
-     *     2. No active world item drops
+     * Victory requires all enemies and item drops
+     * to be cleared.
      */
     if (Enemy_GetCount() == 0 &&
         ItemDrop_GetCount() == 0)
@@ -323,15 +247,377 @@ void Game_Update(void)
     }
 }
 
+/*
+ * ============================================================
+ * UI HELPERS
+ * ============================================================
+ */
+
+static int Game_GetScreenWidth(void)
+{
+    return GetScreenWidth();
+}
+
+static int Game_GetScreenHeight(void)
+{
+    return GetScreenHeight();
+}
 
 /*
  * ------------------------------------------------------------
- * INVENTORY HUD
+ * GENERIC PANEL
  * ------------------------------------------------------------
- *
- * Displays the player's current inventory
- * contents during gameplay.
  */
+
+static void Game_DrawPanel(
+    int x,
+    int y,
+    int width,
+    int height,
+    Color border_color)
+{
+    Rectangle shadow =
+    {
+        (float)x + 3.0f,
+        (float)y + 4.0f,
+        (float)width,
+        (float)height
+    };
+
+    Rectangle panel =
+    {
+        (float)x,
+        (float)y,
+        (float)width,
+        (float)height
+    };
+
+    /*
+     * Shadow.
+     */
+    DrawRectangleRounded(
+        shadow,
+        UI_PANEL_ROUNDNESS,
+        UI_PANEL_SEGMENTS,
+        Fade(BLACK, 0.55f));
+
+    /*
+     * Main body.
+     */
+    DrawRectangleRounded(
+        panel,
+        UI_PANEL_ROUNDNESS,
+        UI_PANEL_SEGMENTS,
+        UI_PANEL_BG);
+
+    /*
+     * Outer border.
+     */
+    DrawRectangleRoundedLinesEx(
+        panel,
+        UI_PANEL_ROUNDNESS,
+        UI_PANEL_SEGMENTS,
+        1.0f,
+        Fade(border_color, 0.75f));
+
+    /*
+     * Top accent line.
+     */
+    if (width > 32)
+    {
+        DrawRectangleRounded(
+            (Rectangle)
+            {
+                (float)x + 12.0f,
+                (float)y + 2.0f,
+                (float)width - 24.0f,
+                2.0f
+            },
+            0.5f,
+            4,
+            Fade(border_color, 0.60f));
+    }
+}
+
+/*
+ * ------------------------------------------------------------
+ * SMALL LABEL
+ * ------------------------------------------------------------
+ */
+
+static void Game_DrawLabel(
+    const char *text,
+    int x,
+    int y,
+    int font_size,
+    Color color)
+{
+    DrawText(
+        text,
+        x,
+        y,
+        font_size,
+        color);
+}
+
+/*
+ * ------------------------------------------------------------
+ * SMALL BADGE
+ * ------------------------------------------------------------
+ */
+
+static void Game_DrawBadge(
+    const char *text,
+    int x,
+    int y,
+    int width,
+    int height,
+    Color accent)
+{
+    DrawRectangleRounded(
+        (Rectangle)
+        {
+            (float)x,
+            (float)y,
+            (float)width,
+            (float)height
+        },
+        0.35f,
+        6,
+        Fade(accent, 0.12f));
+
+    DrawRectangleRoundedLinesEx(
+        (Rectangle)
+        {
+            (float)x,
+            (float)y,
+            (float)width,
+            (float)height
+        },
+        0.35f,
+        6,
+        1.0f,
+        Fade(accent, 0.40f));
+
+    int text_width =
+        MeasureText(
+            text,
+            9);
+
+    DrawText(
+        text,
+        x +
+            (width -
+             text_width) / 2,
+        y + 4,
+        9,
+        accent);
+}
+
+/*
+ * ============================================================
+ * PLAYER HUD
+ * ============================================================
+ *
+ * Compact top-left player status.
+ *
+ * It is intentionally kept above the actual dungeon play
+ * space so that enemies are not hidden by the HUD.
+ */
+
+static void Game_RenderPlayerHUD(void)
+{
+    Player *player =
+        Player_Get();
+
+    if (player == NULL)
+        return;
+
+    const int panel_x = 4;
+    const int panel_y = 4;
+
+    const int panel_width = 258;
+    const int panel_height = 68;
+
+    Game_DrawPanel(
+        panel_x,
+        panel_y,
+        panel_width,
+        panel_height,
+        UI_GOLD);
+
+    /*
+     * --------------------------------------------------------
+     * HEADER
+     * --------------------------------------------------------
+     */
+
+    DrawCircle(
+        panel_x + 16,
+        panel_y + 16,
+        4.0f,
+        UI_GREEN);
+
+    Game_DrawLabel(
+        "PLAYER",
+        panel_x + 27,
+        panel_y + 9,
+        12,
+        UI_GOLD);
+
+    Game_DrawLabel(
+        "SURVIVOR",
+        panel_x + 27,
+        panel_y + 24,
+        8,
+        UI_TEXT_DIM);
+
+    /*
+     * Potion badge.
+     */
+    Game_DrawBadge(
+        "H  POTION",
+        panel_x + panel_width - 72,
+        panel_y + 9,
+        58,
+        21,
+        UI_GOLD);
+
+    /*
+     * --------------------------------------------------------
+     * HP
+     * --------------------------------------------------------
+     */
+
+    Game_DrawLabel(
+        "HP",
+        panel_x + 13,
+        panel_y + 42,
+        10,
+        UI_TEXT);
+
+    const int bar_x =
+        panel_x + 39;
+
+    const int bar_y =
+        panel_y + 41;
+
+    const int bar_width = 154;
+    const int bar_height = 14;
+
+    float health_ratio =
+        (float)player->health / 100.0f;
+
+    if (health_ratio < 0.0f)
+        health_ratio = 0.0f;
+
+    if (health_ratio > 1.0f)
+        health_ratio = 1.0f;
+
+    /*
+     * Background.
+     */
+    DrawRectangleRounded(
+        (Rectangle)
+        {
+            (float)bar_x,
+            (float)bar_y,
+            (float)bar_width,
+            (float)bar_height
+        },
+        0.35f,
+        6,
+        Fade(DARKGRAY, 0.85f));
+
+    /*
+     * HP color.
+     */
+    Color health_color =
+        UI_HP_GREEN;
+
+    if (health_ratio <= 0.50f)
+        health_color = UI_HP_ORANGE;
+
+    if (health_ratio <= 0.25f)
+        health_color = UI_HP_RED;
+
+    int filled_width =
+        (int)(
+            (float)bar_width *
+            health_ratio);
+
+    if (filled_width > 0)
+    {
+        DrawRectangleRounded(
+            (Rectangle)
+            {
+                (float)bar_x,
+                (float)bar_y,
+                (float)filled_width,
+                (float)bar_height
+            },
+            0.35f,
+            6,
+            health_color);
+    }
+
+    /*
+     * Subtle shine.
+     */
+    if (filled_width > 4)
+    {
+        DrawRectangle(
+            bar_x + 3,
+            bar_y + 2,
+            filled_width - 6,
+            2,
+            Fade(WHITE, 0.18f));
+    }
+
+    /*
+     * HP text.
+     */
+    const char *health_text =
+        TextFormat(
+            "%d / %d",
+            player->health,
+            100);
+
+    int health_text_width =
+        MeasureText(
+            health_text,
+            9);
+
+    DrawText(
+        health_text,
+        bar_x +
+            (bar_width -
+             health_text_width) / 2,
+        bar_y + 2,
+        9,
+        WHITE);
+
+    /*
+     * Potion label.
+     */
+    Game_DrawLabel(
+        "HEALTH POTION",
+        panel_x + 201,
+        panel_y + 43,
+        8,
+        UI_TEXT_DIM);
+}
+
+/*
+ * ============================================================
+ * INVENTORY HUD
+ * ============================================================
+ *
+ * The inventory is a dedicated bottom-right card.
+ *
+ * This is deliberately separated from the debug footer.
+ */
+
 static void Game_RenderInventoryHUD(void)
 {
     Player *player =
@@ -340,109 +626,678 @@ static void Game_RenderInventoryHUD(void)
     if (player == NULL)
         return;
 
-    /*
-     * Inventory panel.
-     */
-    DrawRectangle(
-        1030,
-        10,
-        235,
-        100,
-        Fade(
-            BLACK,
-            0.75f
-        )
-    );
+    const int screen_width =
+        Game_GetScreenWidth();
 
-    DrawText(
+    const int screen_height =
+        Game_GetScreenHeight();
+
+    const int panel_width = 246;
+    const int panel_height = 76;
+
+    const int panel_x =
+        screen_width -
+        panel_width -
+        8;
+
+    const int panel_y =
+        screen_height -
+        UI_FOOTER_HEIGHT -
+        panel_height -
+        8;
+
+    Game_DrawPanel(
+        panel_x,
+        panel_y,
+        panel_width,
+        panel_height,
+        UI_GOLD);
+
+    /*
+     * --------------------------------------------------------
+     * HEADER
+     * --------------------------------------------------------
+     */
+
+    Game_DrawLabel(
         "INVENTORY",
-        1045,
-        20,
-        18,
-        GOLD
-    );
+        panel_x + 12,
+        panel_y + 9,
+        12,
+        UI_GOLD);
 
-    /*
-     * Display number of occupied inventory slots.
-     */
-    DrawText(
+    const char *capacity_text =
         TextFormat(
-            "Slots: %d/%d",
+            "%d / %d",
             player->inventory.item_count,
-            INVENTORY_MAX_ITEMS
-        ),
-        1045,
-        43,
-        14,
-        WHITE
-    );
+            INVENTORY_MAX_ITEMS);
+
+    int capacity_width =
+        MeasureText(
+            capacity_text,
+            9);
+
+    DrawText(
+        capacity_text,
+        panel_x +
+            panel_width -
+            capacity_width -
+            12,
+        panel_y + 11,
+        9,
+        UI_TEXT_DIM);
 
     /*
-     * Display health potion quantity.
+     * Divider.
      */
+    DrawLine(
+        panel_x + 12,
+        panel_y + 27,
+        panel_x + panel_width - 12,
+        panel_y + 27,
+        Fade(WHITE, 0.12f));
+
+    /*
+     * --------------------------------------------------------
+     * HEALTH POTION ITEM
+     * --------------------------------------------------------
+     */
+
     int potion_quantity =
         Inventory_GetQuantity(
             &player->inventory,
-            ITEM_ID_HEALTH_POTION
-        );
-
-    DrawText(
-        TextFormat(
-            "Health Potion: %d",
-            potion_quantity
-        ),
-        1045,
-        65,
-        14,
-        WHITE
-    );
+            ITEM_ID_HEALTH_POTION);
 
     /*
-     * Display every currently stored item.
+     * Item slot.
      */
-    int y =
-        87;
+    DrawRectangleRounded(
+        (Rectangle)
+        {
+            (float)panel_x + 12,
+            (float)panel_y + 35,
+            32.0f,
+            28.0f
+        },
+        0.20f,
+        6,
+        Fade(UI_GOLD, 0.10f));
 
-    for (int i = 0;
-         i < INVENTORY_MAX_ITEMS;
-         i++)
-    {
-        InventoryItem *item =
-            &player->inventory.items[i];
+    DrawRectangleRoundedLinesEx(
+        (Rectangle)
+        {
+            (float)panel_x + 12,
+            (float)panel_y + 35,
+            32.0f,
+            28.0f
+        },
+        0.20f,
+        6,
+        1.0f,
+        Fade(UI_GOLD, 0.35f));
 
-        if (item->type == ITEM_NONE)
-            continue;
+    /*
+     * Potion symbol.
+     */
+    DrawCircle(
+        panel_x + 28,
+        panel_y + 49,
+        7.0f,
+        UI_HP_RED);
 
-        const ItemDefinition *definition =
-            Items_GetDefinition(
-                (ItemId)item->item_id
-            );
+    DrawRectangle(
+        panel_x + 25,
+        panel_y + 39,
+        6,
+        5,
+        UI_TEXT);
 
-        if (definition == NULL)
-            continue;
+    /*
+     * Item text.
+     */
+    Game_DrawLabel(
+        "HEALTH POTION",
+        panel_x + 55,
+        panel_y + 37,
+        10,
+        UI_TEXT);
 
-        /*
-         * Avoid drawing outside the panel.
-         */
-        if (y > 100)
-            break;
+    Game_DrawLabel(
+        "Restore health",
+        panel_x + 55,
+        panel_y + 51,
+        8,
+        UI_TEXT_DIM);
 
-        DrawText(
-            TextFormat(
-                "%s x%d",
-                definition->name,
-                item->quantity
-            ),
-            1045,
-            y,
-            12,
-            LIGHTGRAY
-        );
-
-        y += 14;
-    }
+    /*
+     * Quantity badge.
+     */
+    Game_DrawBadge(
+        TextFormat(
+            "x%d",
+            potion_quantity),
+        panel_x + panel_width - 45,
+        panel_y + 42,
+        31,
+        20,
+        UI_GOLD);
 }
 
+/*
+ * ============================================================
+ * BOSS HUD
+ * ============================================================
+ */
+
+static void Game_RenderBossHUD(void)
+{
+    Enemy *boss = NULL;
+
+    /*
+     * Find active boss.
+     */
+    for (int i = 0;
+         i < MAX_ENEMIES;
+         i++)
+    {
+        Enemy *enemy =
+            Enemy_Get(i);
+
+        if (enemy == NULL)
+            continue;
+
+        if (!enemy->active)
+            continue;
+
+        if (!enemy->is_boss)
+            continue;
+
+        if (enemy->state ==
+            ENEMY_STATE_DEAD)
+        {
+            continue;
+        }
+
+        boss = enemy;
+        break;
+    }
+
+    if (boss == NULL)
+        return;
+
+    const int screen_width =
+        Game_GetScreenWidth();
+
+    const int screen_height =
+        Game_GetScreenHeight();
+
+    const int panel_width = 520;
+    const int panel_height = 78;
+
+    const int panel_x =
+        (screen_width -
+         panel_width) /
+        2;
+
+    const int panel_y =
+        screen_height -
+        UI_FOOTER_HEIGHT -
+        panel_height -
+        8;
+
+    Color boss_accent =
+        UI_BOSS_RED;
+
+    if (boss->boss_phase ==
+        BOSS_PHASE_TWO)
+    {
+        boss_accent =
+            UI_BOSS_ORANGE;
+    }
+    else if (boss->boss_phase ==
+             BOSS_PHASE_THREE)
+    {
+        boss_accent =
+            UI_BOSS_PURPLE;
+    }
+
+    Game_DrawPanel(
+        panel_x,
+        panel_y,
+        panel_width,
+        panel_height,
+        boss_accent);
+
+    /*
+     * --------------------------------------------------------
+     * HEADER
+     * --------------------------------------------------------
+     */
+
+    Game_DrawLabel(
+        "DUNGEON BOSS",
+        panel_x + 16,
+        panel_y + 8,
+        13,
+        UI_GOLD);
+
+    /*
+     * Phase badge.
+     */
+
+    const char *phase_text =
+        "PHASE I";
+
+    if (boss->boss_phase ==
+        BOSS_PHASE_TWO)
+    {
+        phase_text =
+            "PHASE II";
+    }
+    else if (boss->boss_phase ==
+             BOSS_PHASE_THREE)
+    {
+        phase_text =
+            "PHASE III";
+    }
+
+    Game_DrawBadge(
+        phase_text,
+        panel_x + panel_width - 78,
+        panel_y + 6,
+        62,
+        20,
+        boss_accent);
+
+    /*
+     * --------------------------------------------------------
+     * HEALTH
+     * --------------------------------------------------------
+     */
+
+    float health_ratio = 0.0f;
+
+    if (boss->max_health > 0)
+    {
+        health_ratio =
+            (float)boss->health /
+            (float)boss->max_health;
+    }
+
+    if (health_ratio < 0.0f)
+        health_ratio = 0.0f;
+
+    if (health_ratio > 1.0f)
+        health_ratio = 1.0f;
+
+    const int bar_x =
+        panel_x + 16;
+
+    const int bar_y =
+        panel_y + 35;
+
+    const int bar_width =
+        panel_width - 32;
+
+    const int bar_height = 18;
+
+    /*
+     * Background.
+     */
+    DrawRectangleRounded(
+        (Rectangle)
+        {
+            (float)bar_x,
+            (float)bar_y,
+            (float)bar_width,
+            (float)bar_height
+        },
+        0.28f,
+        8,
+        Fade(DARKGRAY, 0.90f));
+
+    /*
+     * Fill.
+     */
+    int filled_width =
+        (int)(
+            (float)bar_width *
+            health_ratio);
+
+    if (filled_width > 0)
+    {
+        DrawRectangleRounded(
+            (Rectangle)
+            {
+                (float)bar_x,
+                (float)bar_y,
+                (float)filled_width,
+                (float)bar_height
+            },
+            0.28f,
+            8,
+            boss_accent);
+    }
+
+    /*
+     * Phase markers.
+     */
+    int marker_one =
+        bar_x +
+        (int)(
+            (float)bar_width *
+            0.33f);
+
+    int marker_two =
+        bar_x +
+        (int)(
+            (float)bar_width *
+            0.66f);
+
+    DrawLine(
+        marker_one,
+        bar_y + 2,
+        marker_one,
+        bar_y + bar_height - 2,
+        Fade(WHITE, 0.40f));
+
+    DrawLine(
+        marker_two,
+        bar_y + 2,
+        marker_two,
+        bar_y + bar_height - 2,
+        Fade(WHITE, 0.40f));
+
+    /*
+     * Border.
+     */
+    DrawRectangleRoundedLinesEx(
+        (Rectangle)
+        {
+            (float)bar_x,
+            (float)bar_y,
+            (float)bar_width,
+            (float)bar_height
+        },
+        0.28f,
+        8,
+        1.0f,
+        Fade(boss_accent, 0.80f));
+
+    /*
+     * HP text.
+     */
+
+    const char *health_text =
+        TextFormat(
+            "%d / %d",
+            boss->health,
+            boss->max_health);
+
+    int health_text_width =
+        MeasureText(
+            health_text,
+            10);
+
+    DrawText(
+        health_text,
+        bar_x +
+            (bar_width -
+             health_text_width) /
+                2,
+        bar_y + 4,
+        10,
+        WHITE);
+
+    /*
+     * Small status line.
+     */
+    Game_DrawLabel(
+        "ADAPTIVE BOSS",
+        panel_x + 16,
+        panel_y + 59,
+        8,
+        UI_TEXT_DIM);
+
+    Game_DrawLabel(
+        "ENCOUNTER",
+        panel_x + panel_width - 71,
+        panel_y + 59,
+        8,
+        UI_TEXT_DIM);
+}
+
+/*
+ * ============================================================
+ * END GAME SCREEN
+ * ============================================================
+ */
+
+static void Game_RenderEndScreen(void)
+{
+    bool victory =
+        (game_state == GAME_STATE_WON);
+
+    const int screen_width =
+        Game_GetScreenWidth();
+
+    const int screen_height =
+        Game_GetScreenHeight();
+
+    /*
+     * Dark cinematic overlay.
+     */
+    DrawRectangle(
+        0,
+        0,
+        screen_width,
+        screen_height,
+        Fade(BLACK, 0.82f));
+
+    /*
+     * Main card.
+     */
+    const int panel_width = 560;
+    const int panel_height = 250;
+
+    int panel_x =
+        (screen_width -
+         panel_width) /
+        2;
+
+    int panel_y =
+        (screen_height -
+         panel_height) /
+        2;
+
+    Color accent_color =
+        victory
+            ? UI_GREEN
+            : UI_HP_RED;
+
+    Rectangle panel =
+    {
+        (float)panel_x,
+        (float)panel_y,
+        (float)panel_width,
+        (float)panel_height
+    };
+
+    /*
+     * Shadow.
+     */
+    DrawRectangleRounded(
+        (Rectangle)
+        {
+            (float)panel_x + 5.0f,
+            (float)panel_y + 7.0f,
+            (float)panel_width,
+            (float)panel_height
+        },
+        0.08f,
+        10,
+        Fade(BLACK, 0.60f));
+
+    /*
+     * Body.
+     */
+    DrawRectangleRounded(
+        panel,
+        0.08f,
+        10,
+        Fade(BLACK, 0.96f));
+
+    /*
+     * Border.
+     */
+    DrawRectangleRoundedLinesEx(
+        panel,
+        0.08f,
+        10,
+        2.0f,
+        Fade(accent_color, 0.85f));
+
+    /*
+     * Title.
+     */
+    const char *title =
+        victory
+            ? "DUNGEON CLEARED"
+            : "YOU DIED";
+
+    int title_size =
+        victory
+            ? 34
+            : 40;
+
+    int title_width =
+        MeasureText(
+            title,
+            title_size);
+
+    DrawText(
+        title,
+        panel_x +
+            (panel_width -
+             title_width) / 2,
+        panel_y + 36,
+        title_size,
+        accent_color);
+
+    /*
+     * Subtitle.
+     */
+    const char *subtitle =
+        victory
+            ? "All enemies and world drops have been cleared."
+            : "Your run has come to an end.";
+
+    int subtitle_width =
+        MeasureText(
+            subtitle,
+            16);
+
+    DrawText(
+        subtitle,
+        panel_x +
+            (panel_width -
+             subtitle_width) / 2,
+        panel_y + 98,
+        16,
+        UI_TEXT_DIM);
+
+    /*
+     * Separator.
+     */
+    DrawLine(
+        panel_x + 55,
+        panel_y + 136,
+        panel_x + panel_width - 55,
+        panel_y + 136,
+        Fade(WHITE, 0.16f));
+
+    /*
+     * Restart button.
+     */
+    const int button_width = 270;
+    const int button_height = 42;
+
+    const int button_x =
+        panel_x +
+        (panel_width -
+         button_width) / 2;
+
+    const int button_y =
+        panel_y + 156;
+
+    DrawRectangleRounded(
+        (Rectangle)
+        {
+            (float)button_x,
+            (float)button_y,
+            (float)button_width,
+            (float)button_height
+        },
+        0.22f,
+        8,
+        Fade(accent_color, 0.12f));
+
+    DrawRectangleRoundedLinesEx(
+        (Rectangle)
+        {
+            (float)button_x,
+            (float)button_y,
+            (float)button_width,
+            (float)button_height
+        },
+        0.22f,
+        8,
+        1.0f,
+        Fade(accent_color, 0.65f));
+
+    const char *restart_text =
+        "PRESS R  •  NEW RUN";
+
+    int restart_width =
+        MeasureText(
+            restart_text,
+            14);
+
+    DrawText(
+        restart_text,
+        button_x +
+            (button_width -
+             restart_width) / 2,
+        button_y + 13,
+        14,
+        WHITE);
+
+    /*
+     * Branding.
+     */
+    const char *footer =
+        "DUNGEONFORGE";
+
+    int footer_width =
+        MeasureText(
+            footer,
+            11);
+
+    DrawText(
+        footer,
+        panel_x +
+            (panel_width -
+             footer_width) / 2,
+        panel_y + 216,
+        11,
+        Fade(UI_GOLD, 0.65f));
+}
+
+/*
+ * ============================================================
+ * DUNGEON GRAPH DEBUG
+ * ============================================================
+ */
 
 static void Game_RenderDungeonGraphDebug(void)
 {
@@ -450,7 +1305,7 @@ static void Game_RenderDungeonGraphDebug(void)
         return;
 
     /*
-     * Draw every graph connection first.
+     * Draw graph connections.
      */
     for (int i = 0;
          i < dungeon.connection_count;
@@ -474,14 +1329,10 @@ static void Game_RenderDungeonGraphDebug(void)
         }
 
         DungeonRoom *room_a =
-            &dungeon.rooms[
-                connection->room_a
-            ];
+            &dungeon.rooms[connection->room_a];
 
         DungeonRoom *room_b =
-            &dungeon.rooms[
-                connection->room_b
-            ];
+            &dungeon.rooms[connection->room_b];
 
         float x1 =
             room_a->center_x *
@@ -507,12 +1358,11 @@ static void Game_RenderDungeonGraphDebug(void)
             (Vector2){x1, y1},
             (Vector2){x2, y2},
             3.0f,
-            YELLOW
-        );
+            YELLOW);
     }
 
     /*
-     * Draw room centers and room IDs.
+     * Draw room centers.
      */
     for (int i = 0;
          i < dungeon.room_count;
@@ -535,64 +1385,53 @@ static void Game_RenderDungeonGraphDebug(void)
             (int)center_x,
             (int)center_y,
             7.0f,
-            ORANGE
-        );
+            ORANGE);
 
         DrawText(
             TextFormat(
                 "R%d",
-                i
-            ),
+                i),
             (int)center_x + 8,
             (int)center_y - 8,
             14,
-            WHITE
-        );
+            WHITE);
     }
 
     /*
-     * Display graph statistics.
+     * Debug statistics panel.
      */
-    DrawRectangle(
+    Game_DrawPanel(
         8,
-        35,
+        88,
         250,
-        55,
-        Fade(
-            BLACK,
-            0.75f
-        )
-    );
+        58,
+        UI_CYAN);
 
     DrawText(
         TextFormat(
-            "Rooms: %d",
-            dungeon.room_count
-        ),
+            "ROOMS  %d",
+            dungeon.room_count),
         18,
-        45,
-        16,
-        WHITE
-    );
+        98,
+        14,
+        WHITE);
 
     DrawText(
         TextFormat(
-            "Connections: %d",
-            dungeon.connection_count
-        ),
+            "CONNECTIONS  %d",
+            dungeon.connection_count),
         18,
-        67,
-        16,
-        WHITE
-    );
+        120,
+        14,
+        WHITE);
 }
 
-
 /*
- * ------------------------------------------------------------
+ * ============================================================
  * A* PATHFINDING DEBUG
- * ------------------------------------------------------------
+ * ============================================================
  */
+
 static void Game_RenderPathfindingDebug(void)
 {
     if (!pathfinding_debug_enabled)
@@ -601,39 +1440,35 @@ static void Game_RenderPathfindingDebug(void)
     Player *player =
         Player_Get();
 
+    if (player == NULL)
+        return;
+
     /*
-     * Display debug panel.
+     * Debug panel.
      */
-    DrawRectangle(
+    Game_DrawPanel(
         8,
-        95,
+        154,
         300,
-        55,
-        Fade(
-            BLACK,
-            0.75f
-        )
-    );
+        58,
+        UI_CYAN);
 
     DrawText(
         "A* PATHFINDING DEBUG",
         18,
-        105,
-        16,
-        SKYBLUE
-    );
+        164,
+        15,
+        UI_CYAN);
 
     DrawText(
         "Next waypoint for each enemy",
         18,
-        127,
-        14,
-        WHITE
-    );
+        186,
+        13,
+        WHITE);
 
     /*
-     * Test the real A* function for every
-     * active enemy.
+     * Test A* for every active enemy.
      */
     for (int i = 0;
          i < Enemy_GetCount();
@@ -659,91 +1494,199 @@ static void Game_RenderPathfindingDebug(void)
                 player->y,
                 enemy->radius,
                 &next_x,
-                &next_y
-            );
+                &next_y);
 
         if (!found)
         {
-            /*
-             * No valid A* route exists.
-             */
             DrawCircle(
                 (int)enemy->x,
                 (int)enemy->y,
                 enemy->radius + 5.0f,
-                MAROON
-            );
+                MAROON);
 
             DrawText(
                 TextFormat(
                     "NO PATH E%d",
-                    i
-                ),
+                    i),
                 (int)enemy->x + 20,
                 (int)enemy->y - 25,
                 12,
-                RED
-            );
+                RED);
 
             continue;
         }
 
-        /*
-         * Draw the calculated next waypoint.
-         */
         DrawLineEx(
-            (Vector2){
+            (Vector2)
+            {
                 enemy->x,
                 enemy->y
             },
-            (Vector2){
+            (Vector2)
+            {
                 next_x,
                 next_y
             },
             3.0f,
-            SKYBLUE
-        );
+            SKYBLUE);
 
         DrawCircle(
             (int)next_x,
             (int)next_y,
             6.0f,
-            SKYBLUE
-        );
+            SKYBLUE);
 
         DrawText(
             TextFormat(
                 "E%d A*",
-                i
-            ),
+                i),
             (int)enemy->x + 20,
             (int)enemy->y + 10,
             12,
-            SKYBLUE
-        );
+            SKYBLUE);
 
-        /*
-         * Draw the direct enemy -> player line
-         * as a reference.
-         */
         DrawLineEx(
-            (Vector2){
+            (Vector2)
+            {
                 enemy->x,
                 enemy->y
             },
-            (Vector2){
+            (Vector2)
+            {
                 player->x,
                 player->y
             },
             1.0f,
-            Fade(
-                RED,
-                0.35f
-            )
-        );
+            Fade(RED, 0.35f));
     }
 }
 
+/*
+ * ============================================================
+ * DEBUG FOOTER
+ * ============================================================
+ *
+ * This footer contains developer controls only.
+ *
+ * Gameplay inventory is no longer mixed into this area.
+ */
+
+static void Game_RenderDebugFooter(void)
+{
+    const int screen_width =
+        Game_GetScreenWidth();
+
+    const int screen_height =
+        Game_GetScreenHeight();
+
+    const int footer_y =
+        screen_height -
+        UI_FOOTER_HEIGHT;
+
+    /*
+     * Footer background.
+     */
+    DrawRectangle(
+        0,
+        footer_y,
+        screen_width,
+        UI_FOOTER_HEIGHT,
+        UI_PANEL_BG_DARK);
+
+    /*
+     * Upper edge.
+     */
+    DrawLine(
+        0,
+        footer_y,
+        screen_width,
+        footer_y,
+        Fade(UI_GOLD, 0.38f));
+
+    /*
+     * Lower edge.
+     */
+    DrawLine(
+        0,
+        screen_height - 1,
+        screen_width,
+        screen_height - 1,
+        Fade(WHITE, 0.06f));
+
+    /*
+     * Debug badge.
+     */
+    Game_DrawBadge(
+        "DEBUG",
+        8,
+        footer_y + 7,
+        48,
+        20,
+        UI_GOLD);
+
+    /*
+     * Controls.
+     */
+    DrawText(
+        "F3 Enemy",
+        66,
+        footer_y + 11,
+        9,
+        UI_TEXT_DIM);
+
+    DrawText(
+        "F4 Graph",
+        138,
+        footer_y + 11,
+        9,
+        UI_TEXT_DIM);
+
+    DrawText(
+        "F5 A*",
+        213,
+        footer_y + 11,
+        9,
+        UI_TEXT_DIM);
+
+    DrawText(
+        "F6 Save",
+        264,
+        footer_y + 11,
+        9,
+        UI_TEXT_DIM);
+
+    DrawText(
+        "F7 Load",
+        334,
+        footer_y + 11,
+        9,
+        UI_TEXT_DIM);
+
+    /*
+     * Center identity.
+     */
+    const char *identity =
+        "DUNGEONFORGE";
+
+    int identity_width =
+        MeasureText(
+            identity,
+            9);
+
+    DrawText(
+        identity,
+        (screen_width -
+         identity_width) / 2,
+        footer_y + 11,
+        9,
+        Fade(UI_GOLD, 0.55f));
+}
+
+/*
+ * ============================================================
+ * GAME RENDER
+ * ============================================================
+ */
 
 void Game_Render(void)
 {
@@ -751,161 +1694,92 @@ void Game_Render(void)
 
     ClearBackground(BLACK);
 
+    /*
+     * --------------------------------------------------------
+     * WORLD
+     * --------------------------------------------------------
+     */
+
     TileMap_Render();
 
     /*
-     * Draw the dungeon graph before entities.
+     * --------------------------------------------------------
+     * DEVELOPER OVERLAYS
+     * --------------------------------------------------------
      */
+
     Game_RenderDungeonGraphDebug();
 
-    /*
-     * Draw A* debug information before entities.
-     */
     Game_RenderPathfindingDebug();
 
     /*
-     * Draw world item drops before entities.
+     * --------------------------------------------------------
+     * WORLD ITEMS
+     * --------------------------------------------------------
      */
+
     ItemDrop_Render();
 
+    /*
+     * --------------------------------------------------------
+     * ENTITIES
+     * --------------------------------------------------------
+     */
+
     Enemy_Render();
+
     Player_Render();
 
     /*
-     * Draw inventory HUD.
+     * --------------------------------------------------------
+     * PLAYING STATE UI
+     * --------------------------------------------------------
      */
-    Game_RenderInventoryHUD();
 
-    /*
-     * Death overlay.
-     */
     if (game_state ==
-        GAME_STATE_DEAD)
+        GAME_STATE_PLAYING)
     {
-        DrawRectangle(
-            0,
-            0,
-            1280,
-            720,
-            Fade(
-                BLACK,
-                0.65f
-            )
-        );
+        /*
+         * Player status.
+         */
+        Game_RenderPlayerHUD();
 
-        DrawText(
-            "YOU DIED",
-            1280 / 2 - 100,
-            300,
-            40,
-            RED
-        );
+        /*
+         * Boss status.
+         */
+        Game_RenderBossHUD();
 
-        DrawText(
-            "Press R to restart",
-            1280 / 2 - 105,
-            355,
-            20,
-            WHITE
-        );
+        /*
+         * Inventory card.
+         */
+        Game_RenderInventoryHUD();
+
+        /*
+         * Developer footer.
+         */
+        Game_RenderDebugFooter();
     }
 
     /*
-     * Victory overlay.
+     * --------------------------------------------------------
+     * END GAME
+     * --------------------------------------------------------
      */
+
     if (game_state ==
-        GAME_STATE_WON)
+            GAME_STATE_DEAD ||
+        game_state ==
+            GAME_STATE_WON)
     {
-        DrawRectangle(
-            0,
-            0,
-            1280,
-            720,
-            Fade(
-                BLACK,
-                0.65f
-            )
-        );
-
-        DrawText(
-            "YOU WON!",
-            1280 / 2 - 100,
-            300,
-            40,
-            GREEN
-        );
-
-        DrawText(
-            "Press R to play again",
-            1280 / 2 - 120,
-            355,
-            20,
-            WHITE
-        );
+        Game_RenderEndScreen();
     }
-
-    /*
-     * Debug controls.
-     */
-    DrawText(
-        "F3: Toggle Enemy Debug",
-        10,
-        10,
-        14,
-        WHITE
-    );
-
-    DrawText(
-        "F4: Toggle Dungeon Graph",
-        10,
-        110,
-        14,
-        WHITE
-    );
-
-    DrawText(
-        "F5: Toggle A* Debug",
-        10,
-        130,
-        14,
-        WHITE
-    );
-
-    /*
-     * Save/load controls.
-     */
-    DrawText(
-        "F6: Save Game",
-        10,
-        170,
-        14,
-        WHITE
-    );
-
-    DrawText(
-        "F7: Load Game",
-        10,
-        190,
-        14,
-        WHITE
-    );
-
-    /*
-     * Health potion control.
-     */
-    DrawText(
-        "H: Use Health Potion",
-        10,
-        210,
-        14,
-        WHITE
-    );
 
     EndDrawing();
 }
 
-
 void Game_Shutdown(void)
 {
+    Audio_Shutdown();
+
     CloseWindow();
 }

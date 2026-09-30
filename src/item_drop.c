@@ -2,6 +2,7 @@
 
 #include "player.h"
 #include "raylib.h"
+#include "audio.h"
 
 #include <math.h>
 
@@ -116,6 +117,7 @@ void ItemDrop_Update(void)
                     item_drops[i].item_id,
                     item_drops[i].quantity))
             {
+                Audio_PlayItemPickup();
                 item_drops[i].active = false;
                 item_drops[i].item_id =
                     ITEM_ID_NONE;

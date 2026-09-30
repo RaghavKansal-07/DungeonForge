@@ -28,7 +28,8 @@ SRC = src/main.c \
       src/behavior.c \
       src/adaptive_ai.c \
       src/serialization.c \
-      src/save.c
+      src/save.c \
+      src/audio.c
 
 $(TARGET): $(SRC)
 	$(CC) $(CFLAGS) $(INCLUDES) $(SRC) $(LDFLAGS) $(LIBS) -o $(TARGET)

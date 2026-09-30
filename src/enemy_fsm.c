@@ -4,6 +4,7 @@
 #include "collision.h"
 #include "pathfinding.h"
 #include "raylib.h"
+#include "audio.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -914,6 +915,8 @@ static void Boss_UpdatePhase(
         boss->boss_phase =
             new_phase;
 
+        Audio_PlayBossPhase();    
+
         boss->boss_state_timer =
             0.0f;
 
@@ -984,6 +987,7 @@ static void Boss_PerformSpecial(
         Player_TakeDamage(
             BOSS_SPECIAL_DAMAGE
         );
+        Audio_PlayBossAttack();
     }
 
     switch (boss->boss_phase)
@@ -2576,6 +2580,8 @@ static void BossFSM_Update(
                     Player_TakeDamage(
                         BOSS_ATTACK_DAMAGE
                     );
+
+                    Audio_PlayBossAttack();
 
                     if (boss->boss_phase ==
                         BOSS_PHASE_THREE)
