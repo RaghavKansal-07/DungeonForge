@@ -19,6 +19,21 @@ typedef struct
 
     float damage_timer;
 
+    /*
+     * -----------------------------------------------------
+     * Dodge State
+     * -----------------------------------------------------
+     */
+
+    float dodge_timer;
+    float dodge_cooldown_timer;
+    float dodge_invulnerability_timer;
+
+    float last_move_x;
+    float last_move_y;
+
+    bool dodging;
+
     bool dead;
 
     Inventory inventory;

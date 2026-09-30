@@ -16,6 +16,10 @@ void Input_Update(void)
 
     input_state.move_right =
         IsKeyDown(KEY_D);
+
+    input_state.dodge =
+        IsKeyPressed(KEY_LEFT_SHIFT) ||
+        IsKeyPressed(KEY_RIGHT_SHIFT);
 }
 
 InputState Input_GetState(void)

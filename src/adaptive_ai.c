@@ -42,6 +42,70 @@ static float RandomFloat(void)
 
 /*
  * ---------------------------------------------------------
+ * Directional Probability Selection
+ * ---------------------------------------------------------
+ *
+ * Select one direction according to the player's
+ * observed probability distribution.
+ *
+ * This is intentionally probabilistic.
+ *
+ * Example:
+ *
+ *     LEFT   0.70
+ *     RIGHT  0.20
+ *     UP     0.07
+ *     DOWN   0.03
+ *
+ * The AI therefore does not perfectly predict the player.
+ */
+
+static AdaptiveDecision SelectPredictedDirection(
+    float left,
+    float right,
+    float up,
+    float down
+)
+{
+    float total =
+        left +
+        right +
+        up +
+        down;
+
+    if (total <= 0.0f)
+    {
+        return ADAPTIVE_DECISION_NONE;
+    }
+
+    float random_value =
+        RandomFloat() * total;
+
+    if (random_value < left)
+    {
+        return ADAPTIVE_DECISION_PREDICT_LEFT;
+    }
+
+    random_value -= left;
+
+    if (random_value < right)
+    {
+        return ADAPTIVE_DECISION_PREDICT_RIGHT;
+    }
+
+    random_value -= right;
+
+    if (random_value < up)
+    {
+        return ADAPTIVE_DECISION_PREDICT_UP;
+    }
+
+    return ADAPTIVE_DECISION_PREDICT_DOWN;
+}
+
+
+/*
+ * ---------------------------------------------------------
  * Initialization
  * ---------------------------------------------------------
  */
@@ -51,7 +115,7 @@ void AdaptiveAI_Init(void)
     /*
      * Seed the random number generator once.
      *
-     * Adaptive AI will use probability rather than
+     * Adaptive AI uses probability rather than
      * deterministic behavior.
      */
     srand(
@@ -67,16 +131,13 @@ void AdaptiveAI_Init(void)
  * Hunter
  * ---------------------------------------------------------
  *
- * Hunter studies the player's movement behavior.
+ * Hunter studies the player's dodge behavior first.
  *
- * Example:
+ * If enough dodge observations exist, the Hunter predicts
+ * the player's future dodge direction probabilistically.
  *
- *     LEFT  = 80%
- *     RIGHT = 15%
- *     UP    =  5%
- *
- * Hunter may predict LEFT, but not with 100%
- * certainty.
+ * If the player has not dodged enough times yet, the
+ * Hunter falls back to the existing movement profile.
  */
 
 static AdaptiveDecisionResult
@@ -101,9 +162,90 @@ AdaptiveAI_DecideHunter(
     }
 
     /*
-     * Find the player's strongest movement
-     * tendency.
+     * -----------------------------------------------------
+     * Prefer Dodge Behavior
+     * -----------------------------------------------------
      */
+
+    if (profile->total_dodges >= 3)
+    {
+        float left =
+            profile->dodge_left_probability;
+
+        float right =
+            profile->dodge_right_probability;
+
+        float up =
+            profile->dodge_up_probability;
+
+        float down =
+            profile->dodge_down_probability;
+
+        /*
+         * Find the strongest observed tendency.
+         */
+        float highest =
+            left;
+
+        if (right > highest)
+            highest = right;
+
+        if (up > highest)
+            highest = up;
+
+        if (down > highest)
+            highest = down;
+
+        /*
+         * The Hunter should not adapt with absolute
+         * certainty.
+         *
+         * Even an 81% player tendency becomes at most
+         * an 85% adaptation chance.
+         */
+        float adaptation =
+            ClampFloat(
+                highest,
+                0.0f,
+                0.85f
+            );
+
+        result.adaptation_level =
+            adaptation;
+
+        result.probability =
+            highest;
+
+        /*
+         * Decide whether the Hunter adapts this cycle.
+         */
+        if (RandomFloat() <= adaptation)
+        {
+            /*
+             * Choose according to the complete
+             * probability distribution.
+             */
+            result.decision =
+                SelectPredictedDirection(
+                    left,
+                    right,
+                    up,
+                    down
+                );
+
+            result.adapted = true;
+        }
+
+        return result;
+    }
+
+
+    /*
+     * -----------------------------------------------------
+     * Movement Fallback
+     * -----------------------------------------------------
+     */
+
     float left =
         profile->move_left_probability;
 
@@ -119,39 +261,15 @@ AdaptiveAI_DecideHunter(
     float highest =
         left;
 
-    AdaptiveDecision predicted =
-        ADAPTIVE_DECISION_PREDICT_LEFT;
-
     if (right > highest)
-    {
         highest = right;
 
-        predicted =
-            ADAPTIVE_DECISION_PREDICT_RIGHT;
-    }
-
     if (up > highest)
-    {
         highest = up;
 
-        predicted =
-            ADAPTIVE_DECISION_PREDICT_UP;
-    }
-
     if (down > highest)
-    {
         highest = down;
 
-        predicted =
-            ADAPTIVE_DECISION_PREDICT_DOWN;
-    }
-
-    /*
-     * Adaptation strength is limited.
-     *
-     * The enemy should never perfectly know
-     * what the player will do.
-     */
     float adaptation =
         ClampFloat(
             highest,
@@ -159,25 +277,21 @@ AdaptiveAI_DecideHunter(
             0.85f
         );
 
-    /*
-     * Add uncertainty.
-     *
-     * Only use the predicted behavior when
-     * the random roll succeeds.
-     */
-    float random_value =
-        RandomFloat();
-
     result.adaptation_level =
         adaptation;
 
     result.probability =
         highest;
 
-    if (random_value <= adaptation)
+    if (RandomFloat() <= adaptation)
     {
         result.decision =
-            predicted;
+            SelectPredictedDirection(
+                left,
+                right,
+                up,
+                down
+            );
 
         result.adapted = true;
     }
@@ -268,8 +382,11 @@ AdaptiveAI_DecideGuardian(
  * Assassin
  * ---------------------------------------------------------
  *
- * Assassin uses movement tendencies to decide
- * which side to attack from.
+ * Assassin uses dodge behavior when enough dodge
+ * observations exist.
+ *
+ * The Assassin attempts to attack from the side
+ * opposite to the player's strongest dodge tendency.
  */
 
 static AdaptiveDecisionResult
@@ -292,6 +409,89 @@ AdaptiveAI_DecideAssassin(
     {
         return result;
     }
+
+    /*
+     * -----------------------------------------------------
+     * Prefer Dodge Behavior
+     * -----------------------------------------------------
+     */
+
+    if (profile->total_dodges >= 3)
+    {
+        float left =
+            profile->dodge_left_probability;
+
+        float right =
+            profile->dodge_right_probability;
+
+        float up =
+            profile->dodge_up_probability;
+
+        float down =
+            profile->dodge_down_probability;
+
+        /*
+         * Find strongest horizontal tendency.
+         */
+        float horizontal_strength =
+            left;
+
+        if (right > horizontal_strength)
+            horizontal_strength = right;
+
+        /*
+         * Vertical dodge tendencies do not directly
+         * map to left/right flanking.
+         */
+        if (left >= right)
+        {
+            result.decision =
+                ADAPTIVE_DECISION_FLANK_RIGHT;
+        }
+        else
+        {
+            result.decision =
+                ADAPTIVE_DECISION_FLANK_LEFT;
+        }
+
+        /*
+         * If vertical behavior dominates, use the
+         * vertical tendency as the adaptation strength.
+         */
+        float strongest =
+            horizontal_strength;
+
+        if (up > strongest)
+            strongest = up;
+
+        if (down > strongest)
+            strongest = down;
+
+        result.probability =
+            strongest;
+
+        result.adaptation_level =
+            ClampFloat(
+                strongest,
+                0.0f,
+                0.85f
+            );
+
+        if (RandomFloat() <=
+            result.adaptation_level)
+        {
+            result.adapted = true;
+        }
+
+        return result;
+    }
+
+
+    /*
+     * -----------------------------------------------------
+     * Movement Fallback
+     * -----------------------------------------------------
+     */
 
     float left =
         profile->move_left_probability;
@@ -347,16 +547,10 @@ AdaptiveAI_DecideAssassin(
  *
  * Boss combines multiple adaptive behaviors.
  *
- * For now it uses the strongest movement
- * tendency.
+ * Dodge behavior has priority because it gives the Boss
+ * information about how the player reacts during combat.
  *
- * Later we will expand this to combine:
- *
- *     movement
- *     attack behavior
- *     positioning
- *     preferred distance
- *     dodge behavior
+ * Movement behavior remains the fallback.
  */
 
 static AdaptiveDecisionResult
@@ -379,6 +573,85 @@ AdaptiveAI_DecideBoss(
     {
         return result;
     }
+
+    /*
+     * -----------------------------------------------------
+     * Dodge-Based Adaptation
+     * -----------------------------------------------------
+     */
+
+    if (profile->total_dodges >= 3)
+    {
+        float left =
+            profile->dodge_left_probability;
+
+        float right =
+            profile->dodge_right_probability;
+
+        float up =
+            profile->dodge_up_probability;
+
+        float down =
+            profile->dodge_down_probability;
+
+        float strongest =
+            left;
+
+        AdaptiveDecision decision =
+            ADAPTIVE_DECISION_FLANK_RIGHT;
+
+        if (right > strongest)
+        {
+            strongest = right;
+
+            decision =
+                ADAPTIVE_DECISION_FLANK_LEFT;
+        }
+
+        if (up > strongest)
+        {
+            strongest = up;
+
+            decision =
+                ADAPTIVE_DECISION_CLOSE_DISTANCE;
+        }
+
+        if (down > strongest)
+        {
+            strongest = down;
+
+            decision =
+                ADAPTIVE_DECISION_CLOSE_DISTANCE;
+        }
+
+        result.decision =
+            decision;
+
+        result.probability =
+            strongest;
+
+        result.adaptation_level =
+            ClampFloat(
+                strongest + 0.10f,
+                0.0f,
+                0.90f
+            );
+
+        if (RandomFloat() <=
+            result.adaptation_level)
+        {
+            result.adapted = true;
+        }
+
+        return result;
+    }
+
+
+    /*
+     * -----------------------------------------------------
+     * Movement Fallback
+     * -----------------------------------------------------
+     */
 
     float left =
         profile->move_left_probability;

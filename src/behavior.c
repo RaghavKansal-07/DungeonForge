@@ -52,6 +52,39 @@ static void Behavior_UpdateMovementProbabilities(void)
 
 
 /*
+ * Recalculate dodge probabilities from the
+ * accumulated dodge counters.
+ */
+static void Behavior_UpdateDodgeProbabilities(void)
+{
+    if (behavior.total_dodges <= 0)
+    {
+        behavior.dodge_left_probability = 0.0f;
+        behavior.dodge_right_probability = 0.0f;
+        behavior.dodge_up_probability = 0.0f;
+        behavior.dodge_down_probability = 0.0f;
+
+        return;
+    }
+
+    float total =
+        (float)behavior.total_dodges;
+
+    behavior.dodge_left_probability =
+        (float)behavior.dodge_left_count / total;
+
+    behavior.dodge_right_probability =
+        (float)behavior.dodge_right_count / total;
+
+    behavior.dodge_up_probability =
+        (float)behavior.dodge_up_count / total;
+
+    behavior.dodge_down_probability =
+        (float)behavior.dodge_down_count / total;
+}
+
+
+/*
  * ---------------------------------------------------------
  * INITIALIZATION
  * ---------------------------------------------------------
@@ -99,6 +132,7 @@ void Behavior_Update(void)
             case EVENT_PLAYER_ATTACK:
             {
                 behavior.total_attacks++;
+
                 break;
             }
 
@@ -135,6 +169,52 @@ void Behavior_Update(void)
                     default:
                         /*
                          * No valid movement direction.
+                         */
+                        break;
+                }
+
+                break;
+            }
+
+
+            /*
+             * -------------------------------------------------
+             * PLAYER DODGE
+             * -------------------------------------------------
+             *
+             * The player generates this event when SHIFT
+             * successfully starts a dodge.
+             *
+             * The dodge direction is stored as a primary
+             * cardinal direction.
+             */
+
+            case EVENT_PLAYER_DODGE:
+            {
+                behavior.total_dodges++;
+
+                switch (event.dodge_direction)
+                {
+                    case DODGE_LEFT:
+                        behavior.dodge_left_count++;
+                        break;
+
+                    case DODGE_RIGHT:
+                        behavior.dodge_right_count++;
+                        break;
+
+                    case DODGE_UP:
+                        behavior.dodge_up_count++;
+                        break;
+
+                    case DODGE_DOWN:
+                        behavior.dodge_down_count++;
+                        break;
+
+                    case DODGE_NONE:
+                    default:
+                        /*
+                         * No valid dodge direction.
                          */
                         break;
                 }
@@ -183,27 +263,32 @@ void Behavior_Update(void)
 
             /*
              * -------------------------------------------------
-             * Other events
+             * OTHER EVENTS
              * -------------------------------------------------
              */
 
-            case EVENT_PLAYER_DODGE:
             case EVENT_ENEMY_DAMAGED:
             case EVENT_NONE:
             default:
                 /*
-                 * These events will be handled by later
-                 * behavior-analysis features.
+                 * These events are not currently used
+                 * by the behavior analyzer.
                  */
                 break;
         }
     }
 
+
     /*
-     * Recalculate all derived movement probabilities
-     * after processing the current batch of events.
+     * ---------------------------------------------------------
+     * UPDATE DERIVED STATISTICS
+     * ---------------------------------------------------------
      */
+
     Behavior_UpdateMovementProbabilities();
+
+    Behavior_UpdateDodgeProbabilities();
+
 
     /*
      * Calculate average damage taken per damage event.
@@ -235,7 +320,7 @@ const PlayerBehavior *Behavior_GetProfile(void)
 
 /*
  * ---------------------------------------------------------
- * PROBABILITY HELPERS
+ * MOVEMENT PROBABILITY HELPERS
  * ---------------------------------------------------------
  */
 
@@ -260,6 +345,36 @@ float Behavior_GetMoveUpProbability(void)
 float Behavior_GetMoveDownProbability(void)
 {
     return behavior.move_down_probability;
+}
+
+
+/*
+ * ---------------------------------------------------------
+ * DODGE PROBABILITY HELPERS
+ * ---------------------------------------------------------
+ */
+
+float Behavior_GetDodgeLeftProbability(void)
+{
+    return behavior.dodge_left_probability;
+}
+
+
+float Behavior_GetDodgeRightProbability(void)
+{
+    return behavior.dodge_right_probability;
+}
+
+
+float Behavior_GetDodgeUpProbability(void)
+{
+    return behavior.dodge_up_probability;
+}
+
+
+float Behavior_GetDodgeDownProbability(void)
+{
+    return behavior.dodge_down_probability;
 }
 
 

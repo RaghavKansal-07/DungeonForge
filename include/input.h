@@ -9,10 +9,15 @@ typedef struct
     bool move_down;
     bool move_left;
     bool move_right;
+
+    bool dodge;
+
 } InputState;
+
 
 void Input_Update(void);
 
 InputState Input_GetState(void);
+
 
 #endif

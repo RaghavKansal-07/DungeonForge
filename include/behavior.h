@@ -54,6 +54,20 @@ typedef struct
 
     /*
      * -----------------------------------------------------
+     * Dodge Behavior
+     * -----------------------------------------------------
+     */
+
+    int total_dodges;
+
+    int dodge_left_count;
+    int dodge_right_count;
+    int dodge_up_count;
+    int dodge_down_count;
+
+
+    /*
+     * -----------------------------------------------------
      * Damage / Aggression Behavior
      * -----------------------------------------------------
      */
@@ -77,6 +91,11 @@ typedef struct
     float move_right_probability;
     float move_up_probability;
     float move_down_probability;
+
+    float dodge_left_probability;
+    float dodge_right_probability;
+    float dodge_up_probability;
+    float dodge_down_probability;
 
 
     /*
@@ -157,6 +176,30 @@ float Behavior_GetMoveUpProbability(void);
  * Get the probability that the player moves down.
  */
 float Behavior_GetMoveDownProbability(void);
+
+
+/*
+ * Get the probability that the player dodges left.
+ */
+float Behavior_GetDodgeLeftProbability(void);
+
+
+/*
+ * Get the probability that the player dodges right.
+ */
+float Behavior_GetDodgeRightProbability(void);
+
+
+/*
+ * Get the probability that the player dodges up.
+ */
+float Behavior_GetDodgeUpProbability(void);
+
+
+/*
+ * Get the probability that the player dodges down.
+ */
+float Behavior_GetDodgeDownProbability(void);
 
 
 /*
