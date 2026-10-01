@@ -393,8 +393,13 @@ float Behavior_GetDodgeDownProbability(void)
 
 bool Behavior_HasEnoughData(void)
 {
-    const int minimum_movements = 10;
+    const int minimum_observations = 10;
 
-    return behavior.total_movements >=
-           minimum_movements;
+    int total_observations =
+        behavior.total_movements +
+        behavior.total_dodges +
+        behavior.total_attacks;
+
+    return total_observations >=
+           minimum_observations;
 }

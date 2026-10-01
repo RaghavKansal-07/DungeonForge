@@ -31,8 +31,88 @@ SRC = src/main.c \
       src/save.c \
       src/audio.c
 
+
+# ---------------------------------------------------------
+# Behavior Tests
+# ---------------------------------------------------------
+
+TEST_BEHAVIOR = tests/test_behavior.exe
+
+TEST_BEHAVIOR_SRC = tests/test_behavior.c \
+                    src/behavior.c \
+                    src/events.c
+
+
+# ---------------------------------------------------------
+# Event System Tests
+# ---------------------------------------------------------
+
+TEST_EVENTS = tests/test_events.exe
+
+TEST_EVENTS_SRC = tests/test_events.c \
+                  src/events.c
+
+
+# ---------------------------------------------------------
+# Adaptive AI Tests
+# ---------------------------------------------------------
+
+TEST_ADAPTIVE_AI = tests/test_adaptive_ai.exe
+
+TEST_ADAPTIVE_AI_SRC = tests/test_adaptive_ai.c \
+                       src/adaptive_ai.c \
+                       src/behavior.c \
+                       src/events.c
+
+
+# ---------------------------------------------------------
+# Main Game
+# ---------------------------------------------------------
+
 $(TARGET): $(SRC)
 	$(CC) $(CFLAGS) $(INCLUDES) $(SRC) $(LDFLAGS) $(LIBS) -o $(TARGET)
 
+
+# ---------------------------------------------------------
+# Behavior Test
+# ---------------------------------------------------------
+
+$(TEST_BEHAVIOR): $(TEST_BEHAVIOR_SRC)
+	$(CC) $(CFLAGS) -Iinclude $(TEST_BEHAVIOR_SRC) -o $(TEST_BEHAVIOR) -lm
+
+
+# ---------------------------------------------------------
+# Event System Test
+# ---------------------------------------------------------
+
+$(TEST_EVENTS): $(TEST_EVENTS_SRC)
+	$(CC) $(CFLAGS) -Iinclude $(TEST_EVENTS_SRC) -o $(TEST_EVENTS)
+
+
+# ---------------------------------------------------------
+# Adaptive AI Test
+# ---------------------------------------------------------
+
+$(TEST_ADAPTIVE_AI): $(TEST_ADAPTIVE_AI_SRC)
+	$(CC) $(CFLAGS) -Iinclude $(TEST_ADAPTIVE_AI_SRC) -o $(TEST_ADAPTIVE_AI) -lm
+
+
+# ---------------------------------------------------------
+# Run All Tests
+# ---------------------------------------------------------
+
+test: $(TEST_BEHAVIOR) $(TEST_EVENTS) $(TEST_ADAPTIVE_AI)
+	./$(TEST_BEHAVIOR)
+	./$(TEST_EVENTS)
+	./$(TEST_ADAPTIVE_AI)
+
+
+# ---------------------------------------------------------
+# Clean
+# ---------------------------------------------------------
+
 clean:
 	rm -f $(TARGET).exe
+	rm -f $(TEST_BEHAVIOR)
+	rm -f $(TEST_EVENTS)
+	rm -f $(TEST_ADAPTIVE_AI)
