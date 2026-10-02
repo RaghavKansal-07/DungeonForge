@@ -1,4 +1,5 @@
 #include "enemy.h"
+#include "adaptive_ai.h"
 #include "enemy_fsm.h"
 #include "collision.h"
 #include "tilemap.h"

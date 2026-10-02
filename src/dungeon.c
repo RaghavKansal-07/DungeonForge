@@ -2,6 +2,7 @@
 #include "tilemap.h"
 
 #include <stdlib.h>
+#include <stdbool.h>
 
 #define MIN_ROOM_WIDTH  5
 #define MIN_ROOM_HEIGHT 4

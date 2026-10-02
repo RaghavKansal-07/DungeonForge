@@ -2,7 +2,7 @@ CC = gcc
 
 CFLAGS = -Wall -Wextra -std=c17
 
-INCLUDES = -Ithird_party/raylib-6.0_win64_mingw-w64/include -Iinclude
+INCLUDES = -Iinclude -Ithird_party/raylib-6.0_win64_mingw-w64/include
 
 LDFLAGS = -Lthird_party/raylib-6.0_win64_mingw-w64/lib
 

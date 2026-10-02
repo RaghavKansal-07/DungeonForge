@@ -1,14 +1,10 @@
 # DungeonForge
 
-A procedural 2D roguelike game built entirely in C, featuring procedural dungeon generation, real-time combat, enemy AI, A* pathfinding, and Adaptive Enemy Intelligence.
+A procedural 2D roguelike game built entirely in C, featuring procedural dungeon generation, real-time combat, enemy AI, A* pathfinding, binary save/load, and Adaptive Enemy Intelligence.
 
 ## Project Status
 
-Active development.
-
-Core gameplay systems and Adaptive Enemy Intelligence are implemented.
-
-Phase 17 — UI, audio, and visual polish — is currently in progress.
+Feature-complete and undergoing final testing, documentation, and submission preparation.
 
 ## Features
 
@@ -29,8 +25,10 @@ Phase 17 — UI, audio, and visual polish — is currently in progress.
 - Adaptive Enemy Intelligence
 - Behavioral player profiling
 - Adaptive enemy decision-making
-- Boss AI and multiple boss phases
-- Debugging tools
+- Boss AI with multiple phases
+- Debugging and visualization tools
+- Gameplay audio
+- Combat and interaction sound effects
 
 ## Adaptive Enemy Intelligence
 
@@ -46,30 +44,44 @@ The game observes player behavior during a run, including:
 
 The collected information is used to build a behavioral profile of the player. Enemy AI can then adapt its decisions probabilistically based on that profile.
 
+Different enemy archetypes use the behavioral information differently:
+
+- **Hunter** — predicts player dodge direction and adjusts movement.
+- **Guardian** — adapts its attack behavior based on the player's attack patterns.
+- **Assassin** — uses dodge behavior to influence flanking decisions.
+- **Boss** — combines multiple behavioral signals for adaptive decisions.
+
 The system is implemented entirely in C using statistics, probabilities, events, and decision rules rather than machine learning.
 
-## Technology
-
-- C17
-- raylib
-- GCC
-- GNU Make
-
-## Build
-
-Build instructions will be added as the project develops.
-
-## Project Structure
+## Architecture
 
 ```text
-DungeonForge/
-├── src/          # Game implementation
-├── include/      # Header files
-├── assets/       # Game assets
-├── tests/        # Tests
-├── third_party/  # Third-party dependencies
-├── saves/        # Runtime save files
-├── docs/         # Project documentation
-├── Makefile
-├── README.md
-└── LICENSE
+Input
+  │
+  ▼
+Game
+  │
+  ├── World / Dungeon
+  │     ├── Tile Map
+  │     └── Dungeon Graph
+  │
+  ├── Entities
+  │     ├── Player
+  │     └── Enemies
+  │
+  ├── Combat
+  │
+  ├── Enemy FSM
+  │
+  ├── A* Pathfinding
+  │
+  ├── Events
+  │     └── Behavior Analysis
+  │
+  ├── Adaptive Enemy AI
+  │
+  ├── Inventory / Items
+  │
+  ├── Save / Load
+  │
+  └── Rendering / UI / Audio

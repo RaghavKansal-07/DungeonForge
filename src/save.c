@@ -10,12 +10,10 @@
 #include <stdint.h>
 #include <string.h>
 
-
 /*
  * Save file location.
  */
 #define SAVE_FILE "saves/save.dat"
-
 
 /*
  * Save file identification.
@@ -25,13 +23,11 @@
  */
 #define SAVE_MAGIC 0x44464F52u
 
-
 /*
  * Increase this whenever the save-file
  * format changes incompatibly.
  */
-#define SAVE_VERSION 1u
-
+#define SAVE_VERSION 2u
 
 /*
  * Maximum number of item drops that can
@@ -40,7 +36,6 @@
  * This must match ITEM_DROP_MAX.
  */
 #define SAVE_MAX_DROPS ITEM_DROP_MAX
-
 
 /*
  * ---------------------------------------------------------
@@ -54,7 +49,6 @@ typedef struct
     uint32_t version;
 
 } SaveHeader;
-
 
 /*
  * ---------------------------------------------------------
@@ -82,7 +76,6 @@ typedef struct
 
 } PlayerSaveData;
 
-
 /*
  * ---------------------------------------------------------
  * Enemy Save Data
@@ -96,6 +89,7 @@ typedef struct
 
 typedef struct
 {
+    /* Basic enemy state */
     bool active;
 
     float x;
@@ -110,6 +104,7 @@ typedef struct
 
     EnemyState state;
 
+    /* Combat / navigation state */
     float attack_cooldown;
     float attack_timer;
 
@@ -127,8 +122,24 @@ typedef struct
 
     bool path_valid;
 
-} EnemySaveData;
+    /* Adaptive Enemy Intelligence state */
+    AdaptiveAIType adaptive_type;
+    AdaptiveDecision adaptive_decision;
 
+    float adaptation_level;
+    float adaptive_timer;
+
+    /* Boss identity and state */
+    bool is_boss;
+
+    BossState boss_state;
+    BossPhase boss_phase;
+
+    float boss_state_timer;
+    float boss_special_timer;
+    float boss_recovery_timer;
+
+} EnemySaveData;
 
 /*
  * ---------------------------------------------------------
@@ -148,7 +159,6 @@ typedef struct
     int quantity;
 
 } ItemDropSaveData;
-
 
 /*
  * ---------------------------------------------------------
@@ -175,7 +185,6 @@ typedef struct
 
 } SaveGameData;
 
-
 /*
  * ---------------------------------------------------------
  * Save_Game
@@ -189,9 +198,7 @@ bool Save_Game(void)
     memset(
         &save_data,
         0,
-        sizeof(save_data)
-    );
-
+        sizeof(save_data));
 
     /*
      * Save header.
@@ -201,7 +208,6 @@ bool Save_Game(void)
 
     save_data.header.version =
         SAVE_VERSION;
-
 
     /*
      * -----------------------------------------------------
@@ -223,7 +229,6 @@ bool Save_Game(void)
 
     save_data.dungeon_seed =
         dungeon->seed;
-
 
     /*
      * -----------------------------------------------------
@@ -255,9 +260,7 @@ bool Save_Game(void)
     memcpy(
         &save_data.player.inventory,
         &player->inventory,
-        sizeof(Inventory)
-    );
-
+        sizeof(Inventory));
 
     /*
      * -----------------------------------------------------
@@ -275,6 +278,7 @@ bool Save_Game(void)
         if (enemy == NULL)
             continue;
 
+        /* Basic enemy state */
         save_data.enemies[i].active =
             enemy->active;
 
@@ -299,6 +303,7 @@ bool Save_Game(void)
         save_data.enemies[i].state =
             enemy->state;
 
+        /* Combat / navigation state */
         save_data.enemies[i].attack_cooldown =
             enemy->attack_cooldown;
 
@@ -328,8 +333,39 @@ bool Save_Game(void)
 
         save_data.enemies[i].path_valid =
             enemy->path_valid;
-    }
 
+        /* Adaptive Enemy Intelligence state */
+        save_data.enemies[i].adaptive_type =
+            enemy->adaptive_type;
+
+        save_data.enemies[i].adaptive_decision =
+            enemy->adaptive_decision;
+
+        save_data.enemies[i].adaptation_level =
+            enemy->adaptation_level;
+
+        save_data.enemies[i].adaptive_timer =
+            enemy->adaptive_timer;
+
+        /* Boss identity and state */
+        save_data.enemies[i].is_boss =
+            enemy->is_boss;
+
+        save_data.enemies[i].boss_state =
+            enemy->boss_state;
+
+        save_data.enemies[i].boss_phase =
+            enemy->boss_phase;
+
+        save_data.enemies[i].boss_state_timer =
+            enemy->boss_state_timer;
+
+        save_data.enemies[i].boss_special_timer =
+            enemy->boss_special_timer;
+
+        save_data.enemies[i].boss_recovery_timer =
+            enemy->boss_recovery_timer;
+    }
 
     /*
      * -----------------------------------------------------
@@ -364,7 +400,6 @@ bool Save_Game(void)
             drop->quantity;
     }
 
-
     /*
      * -----------------------------------------------------
      * Write save file
@@ -374,10 +409,8 @@ bool Save_Game(void)
     return Serialization_Write(
         SAVE_FILE,
         &save_data,
-        sizeof(save_data)
-    );
+        sizeof(save_data));
 }
-
 
 /*
  * ---------------------------------------------------------
@@ -392,9 +425,7 @@ bool Load_Game(void)
     memset(
         &save_data,
         0,
-        sizeof(save_data)
-    );
-
+        sizeof(save_data));
 
     /*
      * Read the complete save file.
@@ -406,7 +437,6 @@ bool Load_Game(void)
     {
         return false;
     }
-
 
     /*
      * -----------------------------------------------------
@@ -425,7 +455,6 @@ bool Load_Game(void)
     {
         return false;
     }
-
 
     /*
      * -----------------------------------------------------
@@ -456,9 +485,7 @@ bool Load_Game(void)
 
     Dungeon_Init(
         dungeon,
-        save_data.dungeon_seed
-    );
-
+        save_data.dungeon_seed);
 
     /*
      * -----------------------------------------------------
@@ -492,9 +519,7 @@ bool Load_Game(void)
     memcpy(
         &player->inventory,
         &save_data.player.inventory,
-        sizeof(Inventory)
-    );
-
+        sizeof(Inventory));
 
     /*
      * -----------------------------------------------------
@@ -525,8 +550,7 @@ bool Load_Game(void)
         memset(
             &enemy,
             0,
-            sizeof(enemy)
-        );
+            sizeof(enemy));
 
         enemy.active =
             save_data.enemies[i].active;
@@ -582,6 +606,37 @@ bool Load_Game(void)
         enemy.path_valid =
             save_data.enemies[i].path_valid;
 
+        /* Adaptive Enemy Intelligence state */
+        enemy.adaptive_type =
+            save_data.enemies[i].adaptive_type;
+
+        enemy.adaptive_decision =
+            save_data.enemies[i].adaptive_decision;
+
+        enemy.adaptation_level =
+            save_data.enemies[i].adaptation_level;
+
+        enemy.adaptive_timer =
+            save_data.enemies[i].adaptive_timer;
+
+        /* Boss identity and state */
+        enemy.is_boss =
+            save_data.enemies[i].is_boss;
+
+        enemy.boss_state =
+            save_data.enemies[i].boss_state;
+
+        enemy.boss_phase =
+            save_data.enemies[i].boss_phase;
+
+        enemy.boss_state_timer =
+            save_data.enemies[i].boss_state_timer;
+
+        enemy.boss_special_timer =
+            save_data.enemies[i].boss_special_timer;
+
+        enemy.boss_recovery_timer =
+            save_data.enemies[i].boss_recovery_timer;
 
         /*
          * Always restore the slot.
@@ -603,7 +658,6 @@ bool Load_Game(void)
             return false;
         }
     }
-
 
     /*
      * -----------------------------------------------------
@@ -629,7 +683,6 @@ bool Load_Game(void)
             return false;
         }
     }
-
 
     return true;
 }
