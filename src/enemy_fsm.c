@@ -844,6 +844,44 @@ static bool Enemy_GetAdaptiveTarget(
             return true;
         }
 
+        case ADAPTIVE_DECISION_CLOSE_DISTANCE:
+        {
+            float dx =
+                player->x - enemy->x;
+
+            float dy =
+                player->y - enemy->y;
+
+            float distance =
+                sqrtf(
+                    dx * dx +
+                    dy * dy
+                );
+
+            if (distance <= 0.001f)
+            {
+                *target_x = player->x;
+                *target_y = player->y;
+                return true;
+            }
+
+            dx /= distance;
+            dy /= distance;
+
+            const float desired_distance =
+                BOSS_ATTACK_RANGE * 0.75f;
+
+            *target_x =
+                player->x -
+                dx * desired_distance;
+
+            *target_y =
+                player->y -
+                dy * desired_distance;
+
+            return true;
+        }
+
         default:
             return false;
     }
