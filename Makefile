@@ -66,6 +66,16 @@ TEST_ADAPTIVE_AI_SRC = tests/test_adaptive_ai.c \
 
 
 # ---------------------------------------------------------
+# Serialization Tests
+# ---------------------------------------------------------
+
+TEST_SERIALIZATION = tests/test_serialization.exe
+
+TEST_SERIALIZATION_SRC = tests/test_serialization.c \
+                         src/serialization.c
+
+
+# ---------------------------------------------------------
 # Main Game
 # ---------------------------------------------------------
 
@@ -98,13 +108,22 @@ $(TEST_ADAPTIVE_AI): $(TEST_ADAPTIVE_AI_SRC)
 
 
 # ---------------------------------------------------------
+# Serialization Test
+# ---------------------------------------------------------
+
+$(TEST_SERIALIZATION): $(TEST_SERIALIZATION_SRC)
+	$(CC) $(CFLAGS) -Iinclude $(TEST_SERIALIZATION_SRC) -o $(TEST_SERIALIZATION)
+
+
+# ---------------------------------------------------------
 # Run All Tests
 # ---------------------------------------------------------
 
-test: $(TEST_BEHAVIOR) $(TEST_EVENTS) $(TEST_ADAPTIVE_AI)
+test: $(TEST_BEHAVIOR) $(TEST_EVENTS) $(TEST_ADAPTIVE_AI) $(TEST_SERIALIZATION)
 	./$(TEST_BEHAVIOR)
 	./$(TEST_EVENTS)
 	./$(TEST_ADAPTIVE_AI)
+	./$(TEST_SERIALIZATION)
 
 
 # ---------------------------------------------------------
@@ -116,3 +135,5 @@ clean:
 	rm -f $(TEST_BEHAVIOR)
 	rm -f $(TEST_EVENTS)
 	rm -f $(TEST_ADAPTIVE_AI)
+	rm -f $(TEST_SERIALIZATION)
+	rm -f tests/test_serialization.dat
