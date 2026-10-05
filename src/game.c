@@ -30,39 +30,52 @@ static Dungeon dungeon;
 static bool dungeon_debug_enabled = false;
 static bool pathfinding_debug_enabled = false;
 
+typedef enum
+{
+    SAVE_STATUS_NONE,
+    SAVE_STATUS_SAVED,
+    SAVE_STATUS_SAVE_FAILED,
+    SAVE_STATUS_LOADED,
+    SAVE_STATUS_LOAD_FAILED
+
+} SaveStatus;
+
+static SaveStatus save_status = SAVE_STATUS_NONE;
+static float save_status_timer = 0.0f;
+
 /*
  * ============================================================
  * UI CONSTANTS
  * ============================================================
  */
 
-#define UI_FOOTER_HEIGHT       34
+#define UI_FOOTER_HEIGHT 34
 
-#define UI_PANEL_ROUNDNESS     0.16f
-#define UI_PANEL_SEGMENTS      8
+#define UI_PANEL_ROUNDNESS 0.16f
+#define UI_PANEL_SEGMENTS 8
 
-#define UI_GOLD                (Color){255, 210, 60, 255}
-#define UI_GOLD_SOFT           (Color){255, 210, 60, 155}
+#define UI_GOLD (Color){255, 210, 60, 255}
+#define UI_GOLD_SOFT (Color){255, 210, 60, 155}
 
-#define UI_PANEL_BG            (Color){7, 9, 13, 238}
-#define UI_PANEL_BG_DARK       (Color){4, 6, 9, 248}
+#define UI_PANEL_BG (Color){7, 9, 13, 238}
+#define UI_PANEL_BG_DARK (Color){4, 6, 9, 248}
 
-#define UI_TEXT                (Color){240, 242, 247, 255}
-#define UI_TEXT_DIM            (Color){145, 153, 168, 255}
+#define UI_TEXT (Color){240, 242, 247, 255}
+#define UI_TEXT_DIM (Color){145, 153, 168, 255}
 
-#define UI_HP_GREEN            (Color){45, 220, 90, 255}
-#define UI_HP_ORANGE           (Color){255, 165, 55, 255}
-#define UI_HP_RED              (Color){235, 55, 65, 255}
+#define UI_HP_GREEN (Color){45, 220, 90, 255}
+#define UI_HP_ORANGE (Color){255, 165, 55, 255}
+#define UI_HP_RED (Color){235, 55, 65, 255}
 
-#define UI_BOSS_RED            (Color){205, 35, 55, 255}
-#define UI_BOSS_ORANGE         (Color){245, 135, 35, 255}
-#define UI_BOSS_PURPLE         (Color){165, 80, 245, 255}
+#define UI_BOSS_RED (Color){205, 35, 55, 255}
+#define UI_BOSS_ORANGE (Color){245, 135, 35, 255}
+#define UI_BOSS_PURPLE (Color){165, 80, 245, 255}
 
-#define UI_CYAN                (Color){80, 200, 255, 255}
+#define UI_CYAN (Color){80, 200, 255, 255}
 
-#define UI_GREEN               (Color){55, 220, 105, 255}
+#define UI_GREEN (Color){55, 220, 105, 255}
 
-#define UI_SHADOW              (Color){0, 0, 0, 150}
+#define UI_SHADOW (Color){0, 0, 0, 150}
 
 /*
  * ============================================================
@@ -143,6 +156,17 @@ void Game_Update(void)
 {
     Input_Update();
 
+    if (save_status_timer > 0.0f)
+    {
+        save_status_timer -= GetFrameTime();
+
+        if (save_status_timer <= 0.0f)
+        {
+            save_status_timer = 0.0f;
+            save_status = SAVE_STATUS_NONE;
+        }
+    }
+
     /*
      * Toggle dungeon graph debug view.
      */
@@ -164,9 +188,19 @@ void Game_Update(void)
     /*
      * Save current game.
      */
+
     if (IsKeyPressed(KEY_F6))
     {
-        Save_Game();
+        if (Save_Game())
+        {
+            save_status = SAVE_STATUS_SAVED;
+        }
+        else
+        {
+            save_status = SAVE_STATUS_SAVE_FAILED;
+        }
+
+        save_status_timer = 2.0f;
     }
 
     /*
@@ -182,7 +216,15 @@ void Game_Update(void)
 
             game_state =
                 GAME_STATE_PLAYING;
+
+            save_status = SAVE_STATUS_LOADED;
         }
+        else
+        {
+            save_status = SAVE_STATUS_LOAD_FAILED;
+        }
+
+        save_status_timer = 2.0f;
     }
 
     /*
@@ -277,20 +319,18 @@ static void Game_DrawPanel(
     Color border_color)
 {
     Rectangle shadow =
-    {
-        (float)x + 3.0f,
-        (float)y + 4.0f,
-        (float)width,
-        (float)height
-    };
+        {
+            (float)x + 3.0f,
+            (float)y + 4.0f,
+            (float)width,
+            (float)height};
 
     Rectangle panel =
-    {
-        (float)x,
-        (float)y,
-        (float)width,
-        (float)height
-    };
+        {
+            (float)x,
+            (float)y,
+            (float)width,
+            (float)height};
 
     /*
      * Shadow.
@@ -326,13 +366,11 @@ static void Game_DrawPanel(
     if (width > 32)
     {
         DrawRectangleRounded(
-            (Rectangle)
-            {
+            (Rectangle){
                 (float)x + 12.0f,
                 (float)y + 2.0f,
                 (float)width - 24.0f,
-                2.0f
-            },
+                2.0f},
             0.5f,
             4,
             Fade(border_color, 0.60f));
@@ -375,25 +413,21 @@ static void Game_DrawBadge(
     Color accent)
 {
     DrawRectangleRounded(
-        (Rectangle)
-        {
+        (Rectangle){
             (float)x,
             (float)y,
             (float)width,
-            (float)height
-        },
+            (float)height},
         0.35f,
         6,
         Fade(accent, 0.12f));
 
     DrawRectangleRoundedLinesEx(
-        (Rectangle)
-        {
+        (Rectangle){
             (float)x,
             (float)y,
             (float)width,
-            (float)height
-        },
+            (float)height},
         0.35f,
         6,
         1.0f,
@@ -408,7 +442,8 @@ static void Game_DrawBadge(
         text,
         x +
             (width -
-             text_width) / 2,
+             text_width) /
+                2,
         y + 4,
         9,
         accent);
@@ -518,13 +553,11 @@ static void Game_RenderPlayerHUD(void)
      * Background.
      */
     DrawRectangleRounded(
-        (Rectangle)
-        {
+        (Rectangle){
             (float)bar_x,
             (float)bar_y,
             (float)bar_width,
-            (float)bar_height
-        },
+            (float)bar_height},
         0.35f,
         6,
         Fade(DARKGRAY, 0.85f));
@@ -542,20 +575,17 @@ static void Game_RenderPlayerHUD(void)
         health_color = UI_HP_RED;
 
     int filled_width =
-        (int)(
-            (float)bar_width *
-            health_ratio);
+        (int)((float)bar_width *
+              health_ratio);
 
     if (filled_width > 0)
     {
         DrawRectangleRounded(
-            (Rectangle)
-            {
+            (Rectangle){
                 (float)bar_x,
                 (float)bar_y,
                 (float)filled_width,
-                (float)bar_height
-            },
+                (float)bar_height},
             0.35f,
             6,
             health_color);
@@ -592,7 +622,8 @@ static void Game_RenderPlayerHUD(void)
         health_text,
         bar_x +
             (bar_width -
-             health_text_width) / 2,
+             health_text_width) /
+                2,
         bar_y + 2,
         9,
         WHITE);
@@ -712,25 +743,21 @@ static void Game_RenderInventoryHUD(void)
      * Item slot.
      */
     DrawRectangleRounded(
-        (Rectangle)
-        {
+        (Rectangle){
             (float)panel_x + 12,
             (float)panel_y + 35,
             32.0f,
-            28.0f
-        },
+            28.0f},
         0.20f,
         6,
         Fade(UI_GOLD, 0.10f));
 
     DrawRectangleRoundedLinesEx(
-        (Rectangle)
-        {
+        (Rectangle){
             (float)panel_x + 12,
             (float)panel_y + 35,
             32.0f,
-            28.0f
-        },
+            28.0f},
         0.20f,
         6,
         1.0f,
@@ -945,13 +972,11 @@ static void Game_RenderBossHUD(void)
      * Background.
      */
     DrawRectangleRounded(
-        (Rectangle)
-        {
+        (Rectangle){
             (float)bar_x,
             (float)bar_y,
             (float)bar_width,
-            (float)bar_height
-        },
+            (float)bar_height},
         0.28f,
         8,
         Fade(DARKGRAY, 0.90f));
@@ -960,20 +985,17 @@ static void Game_RenderBossHUD(void)
      * Fill.
      */
     int filled_width =
-        (int)(
-            (float)bar_width *
-            health_ratio);
+        (int)((float)bar_width *
+              health_ratio);
 
     if (filled_width > 0)
     {
         DrawRectangleRounded(
-            (Rectangle)
-            {
+            (Rectangle){
                 (float)bar_x,
                 (float)bar_y,
                 (float)filled_width,
-                (float)bar_height
-            },
+                (float)bar_height},
             0.28f,
             8,
             boss_accent);
@@ -984,15 +1006,13 @@ static void Game_RenderBossHUD(void)
      */
     int marker_one =
         bar_x +
-        (int)(
-            (float)bar_width *
-            0.33f);
+        (int)((float)bar_width *
+              0.33f);
 
     int marker_two =
         bar_x +
-        (int)(
-            (float)bar_width *
-            0.66f);
+        (int)((float)bar_width *
+              0.66f);
 
     DrawLine(
         marker_one,
@@ -1012,13 +1032,11 @@ static void Game_RenderBossHUD(void)
      * Border.
      */
     DrawRectangleRoundedLinesEx(
-        (Rectangle)
-        {
+        (Rectangle){
             (float)bar_x,
             (float)bar_y,
             (float)bar_width,
-            (float)bar_height
-        },
+            (float)bar_height},
         0.28f,
         8,
         1.0f,
@@ -1116,24 +1134,21 @@ static void Game_RenderEndScreen(void)
             : UI_HP_RED;
 
     Rectangle panel =
-    {
-        (float)panel_x,
-        (float)panel_y,
-        (float)panel_width,
-        (float)panel_height
-    };
+        {
+            (float)panel_x,
+            (float)panel_y,
+            (float)panel_width,
+            (float)panel_height};
 
     /*
      * Shadow.
      */
     DrawRectangleRounded(
-        (Rectangle)
-        {
+        (Rectangle){
             (float)panel_x + 5.0f,
             (float)panel_y + 7.0f,
             (float)panel_width,
-            (float)panel_height
-        },
+            (float)panel_height},
         0.08f,
         10,
         Fade(BLACK, 0.60f));
@@ -1179,7 +1194,8 @@ static void Game_RenderEndScreen(void)
         title,
         panel_x +
             (panel_width -
-             title_width) / 2,
+             title_width) /
+                2,
         panel_y + 36,
         title_size,
         accent_color);
@@ -1201,7 +1217,8 @@ static void Game_RenderEndScreen(void)
         subtitle,
         panel_x +
             (panel_width -
-             subtitle_width) / 2,
+             subtitle_width) /
+                2,
         panel_y + 98,
         16,
         UI_TEXT_DIM);
@@ -1225,31 +1242,28 @@ static void Game_RenderEndScreen(void)
     const int button_x =
         panel_x +
         (panel_width -
-         button_width) / 2;
+         button_width) /
+            2;
 
     const int button_y =
         panel_y + 156;
 
     DrawRectangleRounded(
-        (Rectangle)
-        {
+        (Rectangle){
             (float)button_x,
             (float)button_y,
             (float)button_width,
-            (float)button_height
-        },
+            (float)button_height},
         0.22f,
         8,
         Fade(accent_color, 0.12f));
 
     DrawRectangleRoundedLinesEx(
-        (Rectangle)
-        {
+        (Rectangle){
             (float)button_x,
             (float)button_y,
             (float)button_width,
-            (float)button_height
-        },
+            (float)button_height},
         0.22f,
         8,
         1.0f,
@@ -1267,7 +1281,8 @@ static void Game_RenderEndScreen(void)
         restart_text,
         button_x +
             (button_width -
-             restart_width) / 2,
+             restart_width) /
+                2,
         button_y + 13,
         14,
         WHITE);
@@ -1287,7 +1302,8 @@ static void Game_RenderEndScreen(void)
         footer,
         panel_x +
             (panel_width -
-             footer_width) / 2,
+             footer_width) /
+                2,
         panel_y + 216,
         11,
         Fade(UI_GOLD, 0.65f));
@@ -1517,16 +1533,12 @@ static void Game_RenderPathfindingDebug(void)
         }
 
         DrawLineEx(
-            (Vector2)
-            {
+            (Vector2){
                 enemy->x,
-                enemy->y
-            },
-            (Vector2)
-            {
+                enemy->y},
+            (Vector2){
                 next_x,
-                next_y
-            },
+                next_y},
             3.0f,
             SKYBLUE);
 
@@ -1546,16 +1558,12 @@ static void Game_RenderPathfindingDebug(void)
             SKYBLUE);
 
         DrawLineEx(
-            (Vector2)
-            {
+            (Vector2){
                 enemy->x,
-                enemy->y
-            },
-            (Vector2)
-            {
+                enemy->y},
+            (Vector2){
                 player->x,
-                player->y
-            },
+                player->y},
             1.0f,
             Fade(RED, 0.35f));
     }
@@ -1663,6 +1671,53 @@ static void Game_RenderDebugFooter(void)
         UI_TEXT_DIM);
 
     /*
+     * Save/load status.
+     */
+    if (save_status != SAVE_STATUS_NONE)
+    {
+        const char *status_text = "";
+        Color status_color = UI_TEXT_DIM;
+        int status_width = 70;
+
+        switch (save_status)
+        {
+        case SAVE_STATUS_SAVED:
+            status_text = "SAVED";
+            status_color = UI_GREEN;
+            status_width = 58;
+            break;
+
+        case SAVE_STATUS_SAVE_FAILED:
+            status_text = "SAVE FAILED";
+            status_color = UI_HP_RED;
+            status_width = 92;
+            break;
+
+        case SAVE_STATUS_LOADED:
+            status_text = "LOADED";
+            status_color = UI_GREEN;
+            status_width = 64;
+            break;
+
+        case SAVE_STATUS_LOAD_FAILED:
+            status_text = "LOAD FAILED";
+            status_color = UI_HP_RED;
+            status_width = 92;
+            break;
+
+        case SAVE_STATUS_NONE:
+            break;
+        }
+
+        Game_DrawBadge(
+            status_text,
+            screen_width - status_width - 8,
+            footer_y + 7,
+            status_width,
+            20,
+            status_color);
+    }
+    /*
      * Center identity.
      */
     const char *identity =
@@ -1676,7 +1731,8 @@ static void Game_RenderDebugFooter(void)
     DrawText(
         identity,
         (screen_width -
-         identity_width) / 2,
+         identity_width) /
+            2,
         footer_y + 11,
         9,
         Fade(UI_GOLD, 0.55f));
