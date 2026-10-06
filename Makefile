@@ -76,6 +76,17 @@ TEST_SERIALIZATION_SRC = tests/test_serialization.c \
 
 
 # ---------------------------------------------------------
+# Pathfinding Tests
+# ---------------------------------------------------------
+
+TEST_PATHFINDING = tests/test_pathfinding.exe
+
+TEST_PATHFINDING_SRC = tests/test_pathfinding.c \
+                       src/pathfinding.c \
+                       src/tilemap.c
+
+
+# ---------------------------------------------------------
 # Main Game
 # ---------------------------------------------------------
 
@@ -116,14 +127,23 @@ $(TEST_SERIALIZATION): $(TEST_SERIALIZATION_SRC)
 
 
 # ---------------------------------------------------------
+# Pathfinding Test
+# ---------------------------------------------------------
+
+$(TEST_PATHFINDING): $(TEST_PATHFINDING_SRC)
+	$(CC) $(CFLAGS) $(INCLUDES) $(TEST_PATHFINDING_SRC) $(LDFLAGS) $(LIBS) -o $(TEST_PATHFINDING) -lm
+
+
+# ---------------------------------------------------------
 # Run All Tests
 # ---------------------------------------------------------
 
-test: $(TEST_BEHAVIOR) $(TEST_EVENTS) $(TEST_ADAPTIVE_AI) $(TEST_SERIALIZATION)
+test: $(TEST_BEHAVIOR) $(TEST_EVENTS) $(TEST_ADAPTIVE_AI) $(TEST_SERIALIZATION) $(TEST_PATHFINDING)
 	./$(TEST_BEHAVIOR)
 	./$(TEST_EVENTS)
 	./$(TEST_ADAPTIVE_AI)
 	./$(TEST_SERIALIZATION)
+	./$(TEST_PATHFINDING)
 
 
 # ---------------------------------------------------------
@@ -136,4 +156,5 @@ clean:
 	rm -f $(TEST_EVENTS)
 	rm -f $(TEST_ADAPTIVE_AI)
 	rm -f $(TEST_SERIALIZATION)
+	rm -f $(TEST_PATHFINDING)
 	rm -f tests/test_serialization.dat
