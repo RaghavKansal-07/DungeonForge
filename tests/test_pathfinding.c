@@ -35,6 +35,30 @@ static bool IsFinitePosition(
            isfinite(y);
 }
 
+static bool IsWalkablePosition(
+    float x,
+    float y
+)
+{
+    int tile_x =
+        (int)(x / TILE_SIZE);
+
+    int tile_y =
+        (int)(y / TILE_SIZE);
+
+    if (tile_x < 0 ||
+        tile_x >= MAP_WIDTH ||
+        tile_y < 0 ||
+        tile_y >= MAP_HEIGHT)
+    {
+        return false;
+    }
+
+    return TileMap_GetTile(
+        tile_x,
+        tile_y) == TILE_FLOOR;
+}
+
 int main(void)
 {
     TileMap_Init();
@@ -201,6 +225,13 @@ int main(void)
         "Pathfinding result is finite"
     );
 
+    Test_Assert(
+        IsWalkablePosition(
+            next_x,
+            next_y),
+        "Pathfinding result is walkable"
+    );
+
     /*
      * Start from a floor tile and request a goal
      * completely surrounded by walls.
@@ -232,6 +263,13 @@ int main(void)
             next_x,
             next_y),
         "Wall-goal path result is finite"
+    );
+
+    Test_Assert(
+        IsWalkablePosition(
+            next_x,
+            next_y),
+        "Wall-goal result is walkable"
     );
 
     printf(
