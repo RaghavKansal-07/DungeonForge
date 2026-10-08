@@ -10,8 +10,7 @@ static int tests_passed = 0;
 
 static void Test_Assert(
     bool condition,
-    const char *message
-)
+    const char *message)
 {
     tests_run++;
 
@@ -28,8 +27,7 @@ static void Test_Assert(
 
 static bool IsFinitePosition(
     float x,
-    float y
-)
+    float y)
 {
     return isfinite(x) &&
            isfinite(y);
@@ -37,8 +35,7 @@ static bool IsFinitePosition(
 
 static bool IsWalkablePosition(
     float x,
-    float y
-)
+    float y)
 {
     int tile_x =
         (int)(x / TILE_SIZE);
@@ -55,8 +52,8 @@ static bool IsWalkablePosition(
     }
 
     return TileMap_GetTile(
-        tile_x,
-        tile_y) == TILE_FLOOR;
+               tile_x,
+               tile_y) == TILE_FLOOR;
 }
 
 int main(void)
@@ -76,8 +73,7 @@ int main(void)
             TileMap_SetTile(
                 x,
                 y,
-                TILE_WALL
-            );
+                TILE_WALL);
         }
     }
 
@@ -91,8 +87,7 @@ int main(void)
             TileMap_SetTile(
                 x,
                 y,
-                TILE_FLOOR
-            );
+                TILE_FLOOR);
         }
     }
 
@@ -111,8 +106,7 @@ int main(void)
             10.0f,
             NULL,
             &next_y),
-        "Rejects NULL X output"
-    );
+        "Rejects NULL X output");
 
     Test_Assert(
         !Pathfinding_FindNextStep(
@@ -123,8 +117,7 @@ int main(void)
             10.0f,
             &next_x,
             NULL),
-        "Rejects NULL Y output"
-    );
+        "Rejects NULL Y output");
 
     /*
      * Invalid start positions must fail.
@@ -138,8 +131,7 @@ int main(void)
             10.0f,
             &next_x,
             &next_y),
-        "Rejects invalid start position"
-    );
+        "Rejects invalid start position");
 
     /*
      * Invalid goal positions must fail.
@@ -153,8 +145,7 @@ int main(void)
             10.0f,
             &next_x,
             &next_y),
-        "Rejects invalid goal position"
-    );
+        "Rejects invalid goal position");
 
     /*
      * Verify that our deterministic map contains
@@ -162,8 +153,7 @@ int main(void)
      */
     Test_Assert(
         TileMap_GetTile(9, 9) == TILE_FLOOR,
-        "Test map contains floor tile"
-    );
+        "Test map contains floor tile");
 
     /*
      * Same-tile navigation should succeed.
@@ -185,15 +175,13 @@ int main(void)
             10.0f,
             &next_x,
             &next_y),
-        "Same-tile pathfinding succeeds"
-    );
+        "Same-tile pathfinding succeeds");
 
     Test_Assert(
         IsFinitePosition(
             next_x,
             next_y),
-        "Same-tile result is finite"
-    );
+        "Same-tile result is finite");
 
     /*
      * Pathfinding between two connected floor tiles.
@@ -215,22 +203,19 @@ int main(void)
             10.0f,
             &next_x,
             &next_y),
-        "Finds path through connected floor tiles"
-    );
+        "Finds path through connected floor tiles");
 
     Test_Assert(
         IsFinitePosition(
             next_x,
             next_y),
-        "Pathfinding result is finite"
-    );
+        "Pathfinding result is finite");
 
     Test_Assert(
         IsWalkablePosition(
             next_x,
             next_y),
-        "Pathfinding result is walkable"
-    );
+        "Pathfinding result is walkable");
 
     /*
      * Start from a floor tile and request a goal
@@ -243,8 +228,7 @@ int main(void)
     TileMap_SetTile(
         20,
         10,
-        TILE_WALL
-    );
+        TILE_WALL);
 
     Test_Assert(
         Pathfinding_FindNextStep(
@@ -255,28 +239,49 @@ int main(void)
             10.0f,
             &next_x,
             &next_y),
-        "Handles wall goal by searching for walkable goal"
-    );
+        "Handles wall goal by searching for walkable goal");
 
     Test_Assert(
         IsFinitePosition(
             next_x,
             next_y),
-        "Wall-goal path result is finite"
-    );
+        "Wall-goal path result is finite");
 
     Test_Assert(
         IsWalkablePosition(
             next_x,
             next_y),
-        "Wall-goal result is walkable"
-    );
+        "Wall-goal result is walkable");
+
+    /*
+     * Completely isolated goal should fail safely.
+     */
+    for (int y = 20; y <= 22; y++)
+    {
+        for (int x = 20; x <= 22; x++)
+        {
+            TileMap_SetTile(
+                x,
+                y,
+                TILE_FLOOR);
+        }
+    }
+
+    Test_Assert(
+        !Pathfinding_FindNextStep(
+            start_x,
+            start_y,
+            21.0f * TILE_SIZE + TILE_SIZE * 0.5f,
+            21.0f * TILE_SIZE + TILE_SIZE * 0.5f,
+            10.0f,
+            &next_x,
+            &next_y),
+        "Rejects unreachable isolated goal");
 
     printf(
         "\nPathfinding: %d/%d passed\n",
         tests_passed,
-        tests_run
-    );
+        tests_run);
 
     return tests_passed == tests_run ? 0 : 1;
 }
