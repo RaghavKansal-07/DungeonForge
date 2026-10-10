@@ -1,108 +1,148 @@
-# DungeonForge
+<div align="center">
 
-> A 2D top-down roguelike written entirely in **C (C17)** with [raylib](https://www.raylib.com/), featuring procedural dungeons, A* pathfinding, a boss fight, and enemies that **adapt to how you play**.
+# ⚔️ DungeonForge
 
-![Language](https://img.shields.io/badge/language-C17-blue)
-![Library](https://img.shields.io/badge/graphics-raylib%206.0-red)
-![Build](https://img.shields.io/badge/build-GNU%20Make-green)
+### A 2D roguelike in pure C where the enemies learn how *you* play
+
+![C17](https://img.shields.io/badge/C-17-00599C?logo=c&logoColor=white)
+![raylib](https://img.shields.io/badge/raylib-6.0-E53935)
+![Build](https://img.shields.io/badge/build-GNU%20Make-2E7D32)
+![Platform](https://img.shields.io/badge/platform-Windows%20(MinGW--w64)-0078D6)
+![Tests](https://img.shields.io/badge/tests-5%20suites-success)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
----
+**Procedural dungeons · A\* pathfinding · Adaptive enemy AI · 3-phase boss · Save / Load**
 
-## Table of Contents
+[Proposal](#-project-proposal) •
+[Features](#-features) •
+[Adaptive AI](#-adaptive-enemy-intelligence) •
+[Controls](#-controls) •
+[Build](#-build-and-run) •
+[Architecture](#-design-and-architecture)
 
-1. [Project Proposal](#project-proposal)
-2. [Features](#features)
-3. [Adaptive Enemy Intelligence](#adaptive-enemy-intelligence)
-4. [Controls](#controls)
-5. [Build and Run](#build-and-run)
-6. [Testing](#testing)
-7. [Project Structure](#project-structure)
-8. [Design and Architecture](#design-and-architecture)
-9. [Known Limitations and Roadmap](#known-limitations-and-roadmap)
-10. [License](#license)
+</div>
 
 ---
 
-## Project Proposal
+<!--
+SCREENSHOTS: take 3 screenshots of the game, save them as
+docs/screenshots/gameplay.png, boss.png and debug.png,
+then delete this comment markers (the lines with <!-- and -->)
+so the section below becomes visible.
+
+## 📸 Screenshots
+
+| Gameplay | Boss Fight | AI Debug View (F3 / F5) |
+|:---:|:---:|:---:|
+| ![Gameplay](docs/screenshots/gameplay.png) | ![Boss](docs/screenshots/boss.png) | ![Debug](docs/screenshots/debug.png) |
+-->
+
+## 📋 Project Proposal
 
 ### Description
 
-DungeonForge is a real-time 2D roguelike. The player explores a procedurally generated dungeon, fights enemies, collects health potions, and defeats a multi-phase boss. The project is written in C only, and every system (game loop, collision, pathfinding, AI, save/load, event queue) is implemented from scratch on top of raylib's windowing, drawing, and audio functions.
+DungeonForge is a real-time 2D top-down roguelike. The player explores a procedurally generated dungeon, fights enemies, collects health potions, and defeats a multi-phase boss.
 
-The distinguishing feature is **Adaptive Enemy Intelligence**: the game records how the player moves, dodges, and attacks, builds a statistical profile, and lets enemies choose counter-strategies from that profile. No machine learning is used, only counters, probabilities, and decision rules.
+The whole project is written in **C only**. Every system (game loop, collision, pathfinding, AI, event queue, save/load) is implemented from scratch. raylib is used only for the window, drawing, input, and audio.
 
-### Goals
+What makes it different is **Adaptive Enemy Intelligence**: the game records how the player moves, dodges, and attacks, builds a statistical profile, and lets enemies pick counter-strategies from it. No machine learning is used, only counters, probabilities, and decision rules.
 
-- Demonstrate structured, modular programming in C: headers/sources separated, clear module interfaces, no global-state sprawl.
-- Implement classic game-programming algorithms by hand: tile collision, A* pathfinding, finite-state machines, procedural generation.
-- Build an event-driven analysis pipeline that influences gameplay.
-- Persist game state with binary serialization and a versioned save format.
-- Verify the logic-heavy modules with automated tests.
-- Follow good repository practice: `.gitignore`, `Makefile`, small meaningful commits, license, documentation.
+### 🎯 Goals
 
-### Specifications
+- Show structured, modular C programming: clear headers, small modules, no hidden coupling
+- Implement classic game algorithms by hand: tile collision, A\*, finite-state machines, procedural generation
+- Build an event-driven analysis pipeline that changes gameplay
+- Persist game state with versioned binary serialization
+- Verify the logic-heavy modules with automated tests
+- Follow good repository practice: `.gitignore`, `Makefile`, meaningful commits, license, documentation
 
-| Item | Detail |
+### 📐 Specifications
+
+| | |
 |---|---|
-| Language | C17 (`-std=c17 -Wall -Wextra`) |
-| Graphics / audio | raylib 6.0 (Windows, MinGW-w64) |
-| Build system | GNU Make |
-| Window | 1280 x 720, 60 FPS |
-| World | 40 x 22 tile map, 32 px tiles |
-| Dungeon | Up to 20 rooms, spanning-tree connectivity, 2-tile-wide corridors |
-| Enemies | Hunter, Guardian, Assassin, plus a 3-phase Boss |
-| Pathfinding | 8-direction A* with no corner cutting |
-| Save format | Binary, magic number + version header |
-
-### Design Summary
-
-The game is a set of small modules coordinated by `game.c`. Gameplay code pushes **events** into a fixed-size queue; the **behavior** module turns events into a player profile; the **adaptive AI** module turns that profile into per-enemy decisions; the **enemy FSM** acts on those decisions. See [Design and Architecture](#design-and-architecture).
+| **Language** | C17 (`-std=c17 -Wall -Wextra`) |
+| **Graphics / audio** | raylib 6.0 |
+| **Build system** | GNU Make |
+| **Platform** | Windows, MinGW-w64 |
+| **Window** | 1280 × 720 at 60 FPS |
+| **World** | 40 × 22 tile map, 32 px tiles |
+| **Dungeon** | up to 20 rooms, spanning-tree connectivity, 2-tile-wide corridors |
+| **Enemies** | Hunter, Guardian, Assassin + 3-phase Boss |
+| **Pathfinding** | 8-direction A\*, no corner cutting |
+| **Save format** | binary with magic number and version header |
 
 ---
 
-## Features
+## ✨ Features
 
-- Top-down gameplay with 8-direction movement and a dodge roll with invulnerability frames
-- Real-time melee combat (cone-shaped attack)
-- Procedural dungeon generation (rooms, corridors, dungeon graph)
-- Enemy finite-state machines (idle, chase, attack, hurt, dead)
-- A* pathfinding with safe waypoints and unreachable-goal handling
-- Local steering and enemy separation to avoid jitter and overlap
-- Boss with three health phases, a special attack, and recovery states
-- Inventory (12 slots), item drops, and health potions
-- Binary save/load, including the learned player profile
-- HUD, boss health bar, debug overlays, sound effects
-- Automated tests for the event queue, behavior profile, adaptive AI, serialization, and pathfinding
+<table>
+<tr>
+<td width="50%" valign="top">
+
+**🎮 Gameplay**
+- 8-direction movement
+- Dodge roll with invulnerability frames
+- Real-time melee combat (cone attack)
+- Inventory (12 slots) and item drops
+- Health potions
+- HUD, boss health bar, sound effects
+
+</td>
+<td width="50%" valign="top">
+
+**🧠 Systems**
+- Procedural dungeon + dungeon graph
+- A\* pathfinding with safe waypoints
+- Enemy finite-state machines
+- Local steering and enemy separation
+- Event queue and player profiling
+- Versioned binary save / load
+
+</td>
+</tr>
+</table>
 
 ---
 
-## Adaptive Enemy Intelligence
+## 🧠 Adaptive Enemy Intelligence
 
-During a run, the game observes:
+```mermaid
+flowchart LR
+    A[Player actions<br/>move · dodge · attack] --> B[Event Queue]
+    B --> C[Behavior Profile<br/>counters and probabilities]
+    C --> D[Adaptive AI<br/>per-archetype decision]
+    D --> E[Enemy FSM<br/>changes movement or attack]
+    E -->|affects| A
+```
 
-- **Movement direction** (left / right / up / down)
-- **Dodge direction**
-- **Attack count**
-- Damage taken and healing (collected for the profile)
+Each enemy asks the AI for a decision about once per second. A decision only takes effect when a **probability roll succeeds**, so enemies are strong but never perfectly predictable.
 
-Each enemy asks the AI for a decision about once per second. A decision only takes effect when a probability roll succeeds, so enemies are not perfectly predictable.
-
-| Archetype | Uses | Behavior |
+| Enemy | Reads | Reaction |
 |---|---|---|
-| **Hunter** | Dodge habits (movement as fallback) | Predicts the player's likely dodge direction and aims slightly ahead of it |
-| **Guardian** | Attack frequency | Changes its attack tempo depending on how aggressive the player is |
-| **Assassin** | Dodge habits (movement as fallback) | Flanks the side opposite the player's dodge habit |
-| **Boss** | Dodge habits (movement as fallback) | Flanks or closes distance based on the player's tendencies |
+| 🔺 **Hunter** | dodge habits (movement as fallback) | predicts your likely dodge direction and aims slightly ahead of it |
+| 🛡️ **Guardian** | how often you attack | changes its attack tempo depending on how aggressive you are |
+| 🔷 **Assassin** | dodge habits (movement as fallback) | flanks the side *opposite* your dodge habit |
+| 👑 **Boss** | dodge habits (movement as fallback) | flanks or closes distance based on your tendencies |
 
-The learned profile is stored in the save file, so loading a game keeps what the enemies have learned.
+> The learned profile is stored in the save file, so loading a game keeps what the enemies have learned.
+
+<details>
+<summary><b>👑 Boss phases</b></summary>
+
+| Phase | Health | Speed | Behavior |
+|---|---|---|---|
+| I | above 70% | 150 | melee attack |
+| II | 70% to 40% | 175 | melee + special attack |
+| III | below 40% | 210 | enraged: faster melee, faster special |
+
+</details>
 
 ---
 
-## Controls
+## 🕹️ Controls
 
 | Key | Action |
-|---|---|
+|:---:|---|
 | `W` `A` `S` `D` | Move |
 | `Shift` | Dodge |
 | `Space` | Melee attack |
@@ -110,137 +150,150 @@ The learned profile is stored in the save file, so loading a game keeps what the
 | `R` | Restart after death or victory |
 | `F3` | Toggle enemy debug text |
 | `F4` | Toggle dungeon graph overlay |
-| `F5` | Toggle A* pathfinding overlay |
+| `F5` | Toggle A\* pathfinding overlay |
 | `F6` | Save game |
 | `F7` | Load game |
 
 ---
 
-## Build and Run
+## 🛠️ Build and Run
 
 ### Prerequisites
 
-- Windows with **MinGW-w64** (GCC) and **GNU Make** (for example via MSYS2 or Git Bash with `make`)
-- **raylib 6.0 for Windows / MinGW-w64**
+- Windows with **MinGW-w64 (GCC)** and **GNU Make**
+- **raylib 6.0** for Windows / MinGW-w64
 
-### Steps
+### Quick start
 
-1. Clone the repository:
-   ```bash
-   git clone <your-repository-url>
-   cd DungeonForge
-   ```
-2. Download `raylib-6.0_win64_mingw-w64` from the [raylib releases page](https://github.com/raysan5/raylib/releases) and extract it so the folder is:
-   ```
-   third_party/raylib-6.0_win64_mingw-w64/
-   ├── include/   (already in the repository)
-   └── lib/       (contains libraylib.a, from the download)
-   ```
-   The repository includes the raylib headers; the compiled library (`.a`) is not committed.
-3. Build:
-   ```bash
-   make
-   ```
-4. Run from the project root (the game loads `assets/audio/...` by relative path):
-   ```bash
-   ./dungeonforge
-   ```
+```bash
+# 1. Clone
+git clone https://github.com/RaghavKansal-07/DungeonForge.git
+cd DungeonForge
+
+# 2. Build
+make
+
+# 3. Run (from the project root, so assets load correctly)
+./dungeonforge
+```
+
+### One-time raylib setup
+
+The repository includes the raylib **headers**, but not the compiled library. Download `raylib-6.0_win64_mingw-w64` from the [raylib releases](https://github.com/raysan5/raylib/releases) and extract it into `third_party/` so this exists:
+
+```text
+third_party/raylib-6.0_win64_mingw-w64/lib/libraylib.a
+```
 
 ### Other commands
 
-```bash
-make test    # build and run all test suites
-make clean   # remove build outputs
-```
+| Command | Does |
+|---|---|
+| `make` | build the game |
+| `make test` | build and run all test suites |
+| `make clean` | remove build outputs |
 
 ---
 
-## Testing
+## 🧪 Testing
 
 ```bash
 make test
 ```
 
-| Suite | What it checks |
+| Suite | Verifies |
 |---|---|
 | `test_events` | FIFO order, capacity, wrap-around, empty queue, NULL handling |
-| `test_behavior` | Counters, probabilities, damage/heal statistics, profile restore and validation |
-| `test_adaptive_ai` | Decision validity, per-archetype behavior, probabilistic adaptation |
-| `test_serialization` | Round trip, truncated files, invalid arguments |
-| `test_pathfinding` | Valid/invalid inputs, same-tile and cross-room paths, unreachable goals |
+| `test_behavior` | counters, probabilities, damage and heal statistics, profile restore and validation |
+| `test_adaptive_ai` | decision validity, per-archetype behavior, probabilistic adaptation |
+| `test_serialization` | round trip, truncated files, invalid arguments |
+| `test_pathfinding` | valid and invalid inputs, same-tile and cross-room paths, unreachable goals |
 
-The tests cover the logic modules that do not need a window. Rendering, collision, player, and FSM code are verified by playing the game.
+These suites cover the modules that run without a window. Rendering, collision, player, and enemy FSM code are verified by playing the game.
 
 ---
 
-## Project Structure
+## 📁 Project Structure
 
-```
+```text
 DungeonForge/
 ├── Makefile
 ├── README.md
 ├── LICENSE
 ├── .gitignore
-├── assets/audio/        sound effects (.ogg)
-├── include/             public headers (.h)
-├── src/                 implementation (.c)
-├── tests/               automated test programs
-├── saves/               save-game directory
-└── third_party/         raylib headers (library downloaded separately)
+├── assets/audio/       sound effects (.ogg)
+├── include/            headers (.h)
+├── src/                implementation (.c)
+├── tests/              automated test programs
+├── saves/              save-game directory
+└── third_party/        raylib headers (library downloaded separately)
 ```
 
 ---
 
-## Design and Architecture
+## 🏗️ Design and Architecture
 
-```text
-Input
-  │
-  ▼
-Game (game.c)  ── main loop, HUD, save/load keys
-  │
-  ├── World:    TileMap ◄── Dungeon (rooms, corridors, graph)
-  ├── Entities: Player, Enemies (pool of 32), Item drops
-  ├── Combat:   Player melee cone, enemy attacks
-  ├── Movement: Collision, A* Pathfinding, local steering
-  ├── Enemy FSM: idle → chase → attack → hurt → dead  (+ Boss states)
-  │
-  └── Adaptive AI pipeline
-        Gameplay ──events──► Event Queue
-                                  │
-                                  ▼
-                          Behavior Profile
-                                  │
-                                  ▼
-                         Adaptive AI decision
-                                  │
-                                  ▼
-                              Enemy FSM
+```mermaid
+flowchart TB
+    Input --> Game
+    Game --> World
+    Game --> Entities
+    Game --> Systems
+
+    subgraph World
+        TileMap
+        Dungeon[Dungeon<br/>rooms · corridors · graph]
+        Dungeon --> TileMap
+    end
+
+    subgraph Entities
+        Player
+        Enemies[Enemies<br/>pool of 32]
+        Drops[Item drops]
+    end
+
+    subgraph Systems
+        Collision
+        Pathfinding[A* Pathfinding]
+        FSM[Enemy FSM]
+        Combat
+        Events[Events → Behavior → Adaptive AI]
+        Save[Save / Load]
+    end
 ```
 
-Key design decisions:
+**Key design decisions**
 
-- **Fixed-size data structures** (event ring buffer of 256, enemy pool of 32, drop pool of 32): no dynamic allocation in the game loop.
-- **Event-driven analysis**: gameplay code only pushes events and never touches the AI, so the AI can be tested with no window.
-- **Deterministic dungeons**: the dungeon is regenerated from a seed, so saves store the seed and not the whole map.
-- **Versioned saves**: a magic number and version reject incompatible or foreign files.
-- **Tested logic core**: modules that do not depend on raylib are built and tested on their own.
-
----
-
-## Known Limitations and Roadmap
-
-Honest notes on what is not finished yet:
-
-- The player's melee attack currently hits to the right only; facing-based attacks are planned.
-- Enemy attacks have no wind-up animation yet.
-- The Iron Sword and Iron Armor items are defined but not yet obtainable.
-- The player behavior profile does not yet track combat distance.
-- Dungeon seed is currently fixed; randomized seeds per run are planned.
-- Saves are binary and not portable across compilers or platforms.
+- 📦 **Fixed-size data structures** (event ring buffer of 256, enemy pool of 32, drop pool of 32): no dynamic allocation in the game loop.
+- 📨 **Event-driven analysis**: gameplay code only pushes events and never touches the AI, so the AI can be tested without a window.
+- 🎲 **Deterministic dungeons**: a dungeon is regenerated from its seed, so saves store the seed and not the whole map.
+- 🔐 **Versioned saves**: a magic number and version reject incompatible or foreign files.
+- ✅ **Tested logic core**: modules that do not depend on raylib are built and tested on their own.
 
 ---
 
-## License
+## 🚧 Known Limitations and Roadmap
 
-Released under the MIT License. See [LICENSE](LICENSE).
+- [x] Boss phases with special attack
+- [x] Adaptive AI with probability rolls
+- [x] Learned profile saved with the game
+- [ ] Attacks that follow the player's facing (currently hits right only)
+- [ ] Random dungeon seed per run (currently fixed)
+- [ ] Enemies placed across rooms, boss in the farthest room
+- [ ] Attack wind-ups so dodging matters
+- [ ] Combat distance tracked in the player profile
+- [ ] Obtainable Iron Sword and Iron Armor (defined, not yet droppable)
+
+Saves are binary and not portable across compilers or platforms.
+
+---
+
+## 📄 License
+
+Released under the **MIT License**. See [LICENSE](LICENSE).
+
+<div align="center">
+
+Built in C with ☕ and raylib
+
+</div>
