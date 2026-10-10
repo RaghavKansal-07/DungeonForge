@@ -502,6 +502,76 @@ static void Test_InvalidValues(void)
     );
 }
 
+static void Test_RestoreProfile(void)
+{
+    Events_Init();
+    Behavior_Init();
+
+    for (int i = 0; i < 6; i++)
+        Events_Push(CreateDodgeEvent(DODGE_LEFT));
+
+    for (int i = 0; i < 2; i++)
+        Events_Push(CreateDodgeEvent(DODGE_RIGHT));
+
+    Events_Push(CreateDamageEvent(30.0f));
+    Behavior_Update();
+
+    PlayerBehavior saved = *Behavior_GetProfile();
+
+    /* Simulate a new run, then a load. */
+    Behavior_Init();
+
+    Test_Assert(
+        Behavior_GetProfile()->total_dodges == 0,
+        "Profile is empty before restore"
+    );
+
+    Test_Assert(
+        Behavior_Restore(&saved),
+        "Valid saved profile restores"
+    );
+
+    Test_Assert(
+        Behavior_GetProfile()->total_dodges == 8 &&
+        Float_Equals(Behavior_GetDodgeLeftProbability(), 0.75f),
+        "Restored dodge statistics match"
+    );
+
+    Test_Assert(
+        Float_Equals(
+            Behavior_GetProfile()->average_damage_taken,
+            30.0f
+        ),
+        "Restored average damage matches"
+    );
+
+    /* Corrupt data must be rejected without changing state. */
+    PlayerBehavior bad = saved;
+    bad.dodge_left_count = 99;
+
+    Test_Assert(
+        !Behavior_Restore(&bad),
+        "Restore rejects direction count above total"
+    );
+
+    bad = saved;
+    bad.total_attacks = -5;
+
+    Test_Assert(
+        !Behavior_Restore(&bad),
+        "Restore rejects negative counters"
+    );
+
+    Test_Assert(
+        Behavior_GetProfile()->total_dodges == 8,
+        "Rejected restore leaves profile unchanged"
+    );
+
+    Test_Assert(
+        !Behavior_Restore(NULL),
+        "Restore rejects NULL"
+    );
+}
 
 /*
  * ---------------------------------------------------------
@@ -527,6 +597,8 @@ int main(void)
     Test_DamageAndHealing();
 
     Test_InvalidValues();
+
+    Test_RestoreProfile();
 
     printf("\n========================================\n");
     printf(

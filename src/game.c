@@ -212,8 +212,6 @@ void Game_Update(void)
         {
             Events_Clear();
 
-            Behavior_Init();
-
             game_state =
                 GAME_STATE_PLAYING;
 
