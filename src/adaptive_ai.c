@@ -6,7 +6,6 @@
 
 static bool adaptive_ai_initialized = false;
 
-
 /*
  * ---------------------------------------------------------
  * Utility
@@ -27,7 +26,6 @@ static float ClampFloat(
     return value;
 }
 
-
 /*
  * Generate a random floating-point number
  * between 0.0 and 1.0.
@@ -37,7 +35,6 @@ static float RandomFloat(void)
     return (float)rand() /
            (float)RAND_MAX;
 }
-
 
 /*
  * ---------------------------------------------------------
@@ -153,7 +150,6 @@ static AdaptiveDecision SelectPredictedDirection(
     return ADAPTIVE_DECISION_NONE;
 }
 
-
 /*
  * ---------------------------------------------------------
  * Initialization
@@ -173,7 +169,6 @@ void AdaptiveAI_Init(void)
 
     adaptive_ai_initialized = true;
 }
-
 
 /*
  * ---------------------------------------------------------
@@ -208,7 +203,6 @@ AdaptiveAI_DecideHunter(
         return result;
     }
 
-
     /*
      * -----------------------------------------------------
      * Prefer Dodge Behavior
@@ -229,7 +223,6 @@ AdaptiveAI_DecideHunter(
         float down =
             profile->dodge_down_probability;
 
-
         /*
          * Find the strongest observed tendency.
          */
@@ -244,7 +237,6 @@ AdaptiveAI_DecideHunter(
 
         if (down > highest)
             highest = down;
-
 
         /*
          * The Hunter should not adapt with absolute
@@ -264,7 +256,6 @@ AdaptiveAI_DecideHunter(
 
         result.probability =
             highest;
-
 
         /*
          * Decide whether the Hunter adapts this cycle.
@@ -288,7 +279,6 @@ AdaptiveAI_DecideHunter(
         return result;
     }
 
-
     /*
      * -----------------------------------------------------
      * Movement Fallback
@@ -307,7 +297,6 @@ AdaptiveAI_DecideHunter(
     float down =
         profile->move_down_probability;
 
-
     float highest =
         left;
 
@@ -320,7 +309,6 @@ AdaptiveAI_DecideHunter(
     if (down > highest)
         highest = down;
 
-
     float adaptation =
         ClampFloat(
             highest,
@@ -332,7 +320,6 @@ AdaptiveAI_DecideHunter(
 
     result.probability =
         highest;
-
 
     if (RandomFloat() <= adaptation)
     {
@@ -348,7 +335,6 @@ AdaptiveAI_DecideHunter(
 
     return result;
 }
-
 
 /*
  * ---------------------------------------------------------
@@ -374,13 +360,11 @@ AdaptiveAI_DecideGuardian(
 
     result.adapted = false;
 
-
     if (profile == NULL ||
         profile->total_attacks < 5)
     {
         return result;
     }
-
 
     /*
      * More attacks indicate a more aggressive
@@ -422,7 +406,6 @@ AdaptiveAI_DecideGuardian(
     return result;
 }
 
-
 /*
  * ---------------------------------------------------------
  * Assassin
@@ -448,13 +431,11 @@ AdaptiveAI_DecideAssassin(
 
     result.adapted = false;
 
-
     if (profile == NULL ||
         !Behavior_HasEnoughData())
     {
         return result;
     }
-
 
     /*
      * -----------------------------------------------------
@@ -476,7 +457,6 @@ AdaptiveAI_DecideAssassin(
         float down =
             profile->dodge_down_probability;
 
-
         /*
          * Find strongest horizontal tendency.
          */
@@ -485,7 +465,6 @@ AdaptiveAI_DecideAssassin(
 
         if (right > horizontal_strength)
             horizontal_strength = right;
-
 
         /*
          * Vertical dodge tendencies do not directly
@@ -506,7 +485,6 @@ AdaptiveAI_DecideAssassin(
                 ADAPTIVE_DECISION_FLANK_LEFT;
         }
 
-
         /*
          * If vertical behavior dominates, use the
          * vertical tendency as the adaptation strength.
@@ -520,7 +498,6 @@ AdaptiveAI_DecideAssassin(
         if (down > strongest)
             strongest = down;
 
-
         result.probability =
             strongest;
 
@@ -529,7 +506,6 @@ AdaptiveAI_DecideAssassin(
                 strongest,
                 0.0f,
                 0.85f);
-
 
         if (RandomFloat() <=
             result.adaptation_level)
@@ -542,7 +518,6 @@ AdaptiveAI_DecideAssassin(
 
         return result;
     }
-
 
     /*
      * -----------------------------------------------------
@@ -562,7 +537,6 @@ AdaptiveAI_DecideAssassin(
     if (right > strongest)
         strongest = right;
 
-
     /*
      * Assassin chooses the opposite side
      * of the player's strongest movement tendency.
@@ -578,7 +552,6 @@ AdaptiveAI_DecideAssassin(
             ADAPTIVE_DECISION_FLANK_LEFT;
     }
 
-
     result.probability =
         strongest;
 
@@ -588,7 +561,6 @@ AdaptiveAI_DecideAssassin(
             0.0f,
             0.85f);
 
-
     if (RandomFloat() <=
         result.adaptation_level)
     {
@@ -597,7 +569,6 @@ AdaptiveAI_DecideAssassin(
 
     return result;
 }
-
 
 /*
  * ---------------------------------------------------------
@@ -625,13 +596,11 @@ AdaptiveAI_DecideBoss(
 
     result.adapted = false;
 
-
     if (profile == NULL ||
         !Behavior_HasEnoughData())
     {
         return result;
     }
-
 
     /*
      * -----------------------------------------------------
@@ -653,13 +622,11 @@ AdaptiveAI_DecideBoss(
         float down =
             profile->dodge_down_probability;
 
-
         float strongest =
             left;
 
         AdaptiveDecision decision =
             ADAPTIVE_DECISION_FLANK_RIGHT;
-
 
         if (right > strongest)
         {
@@ -669,7 +636,6 @@ AdaptiveAI_DecideBoss(
                 ADAPTIVE_DECISION_FLANK_LEFT;
         }
 
-
         if (up > strongest)
         {
             strongest = up;
@@ -678,7 +644,6 @@ AdaptiveAI_DecideBoss(
                 ADAPTIVE_DECISION_CLOSE_DISTANCE;
         }
 
-
         if (down > strongest)
         {
             strongest = down;
@@ -686,7 +651,6 @@ AdaptiveAI_DecideBoss(
             decision =
                 ADAPTIVE_DECISION_CLOSE_DISTANCE;
         }
-
 
         result.decision =
             decision;
@@ -700,7 +664,6 @@ AdaptiveAI_DecideBoss(
                 0.0f,
                 0.90f);
 
-
         if (RandomFloat() <=
             result.adaptation_level)
         {
@@ -712,7 +675,6 @@ AdaptiveAI_DecideBoss(
 
         return result;
     }
-
 
     /*
      * -----------------------------------------------------
@@ -732,13 +694,11 @@ AdaptiveAI_DecideBoss(
     float down =
         profile->move_down_probability;
 
-
     float strongest =
         left;
 
     AdaptiveDecision decision =
         ADAPTIVE_DECISION_FLANK_RIGHT;
-
 
     if (right > strongest)
     {
@@ -748,7 +708,6 @@ AdaptiveAI_DecideBoss(
             ADAPTIVE_DECISION_FLANK_LEFT;
     }
 
-
     if (up > strongest)
     {
         strongest = up;
@@ -757,7 +716,6 @@ AdaptiveAI_DecideBoss(
             ADAPTIVE_DECISION_CLOSE_DISTANCE;
     }
 
-
     if (down > strongest)
     {
         strongest = down;
@@ -765,7 +723,6 @@ AdaptiveAI_DecideBoss(
         decision =
             ADAPTIVE_DECISION_CLOSE_DISTANCE;
     }
-
 
     result.decision =
         decision;
@@ -779,7 +736,6 @@ AdaptiveAI_DecideBoss(
             0.0f,
             0.90f);
 
-
     if (RandomFloat() <=
         result.adaptation_level)
     {
@@ -792,6 +748,21 @@ AdaptiveAI_DecideBoss(
     return result;
 }
 
+/*
+ * A decision only counts when the probability roll
+ * succeeded. Otherwise the enemy behaves normally.
+ */
+static AdaptiveDecisionResult ApplyAdaptationRoll(
+    AdaptiveDecisionResult result)
+{
+    if (!result.adapted)
+    {
+        result.decision =
+            ADAPTIVE_DECISION_NONE;
+    }
+
+    return result;
+}
 
 /*
  * ---------------------------------------------------------
@@ -804,7 +775,6 @@ AdaptiveDecisionResult AdaptiveAI_Decide(
 {
     AdaptiveDecisionResult result = {0};
 
-
     /*
      * Make sure initialization happened.
      */
@@ -813,34 +783,31 @@ AdaptiveDecisionResult AdaptiveAI_Decide(
         AdaptiveAI_Init();
     }
 
-
     const PlayerBehavior *profile =
         Behavior_GetProfile();
 
-
     switch (type)
     {
-        case ADAPTIVE_AI_HUNTER:
-            return AdaptiveAI_DecideHunter(
-                profile);
+    case ADAPTIVE_AI_HUNTER:
+        return ApplyAdaptationRoll(
+            AdaptiveAI_DecideHunter(profile));
 
-        case ADAPTIVE_AI_GUARDIAN:
-            return AdaptiveAI_DecideGuardian(
-                profile);
+    case ADAPTIVE_AI_GUARDIAN:
+        return ApplyAdaptationRoll(
+            AdaptiveAI_DecideGuardian(profile));
 
-        case ADAPTIVE_AI_ASSASSIN:
-            return AdaptiveAI_DecideAssassin(
-                profile);
+    case ADAPTIVE_AI_ASSASSIN:
+        return ApplyAdaptationRoll(
+            AdaptiveAI_DecideAssassin(profile));
 
-        case ADAPTIVE_AI_BOSS:
-            return AdaptiveAI_DecideBoss(
-                profile);
+    case ADAPTIVE_AI_BOSS:
+        return ApplyAdaptationRoll(
+            AdaptiveAI_DecideBoss(profile));
 
-        default:
-            return result;
+    default:
+        return result;
     }
 }
-
 
 /*
  * ---------------------------------------------------------
@@ -853,61 +820,60 @@ const char *AdaptiveAI_GetTypeName(
 {
     switch (type)
     {
-        case ADAPTIVE_AI_HUNTER:
-            return "HUNTER";
+    case ADAPTIVE_AI_HUNTER:
+        return "HUNTER";
 
-        case ADAPTIVE_AI_GUARDIAN:
-            return "GUARDIAN";
+    case ADAPTIVE_AI_GUARDIAN:
+        return "GUARDIAN";
 
-        case ADAPTIVE_AI_ASSASSIN:
-            return "ASSASSIN";
+    case ADAPTIVE_AI_ASSASSIN:
+        return "ASSASSIN";
 
-        case ADAPTIVE_AI_BOSS:
-            return "BOSS";
+    case ADAPTIVE_AI_BOSS:
+        return "BOSS";
 
-        default:
-            return "UNKNOWN";
+    default:
+        return "UNKNOWN";
     }
 }
-
 
 const char *AdaptiveAI_GetDecisionName(
     AdaptiveDecision decision)
 {
     switch (decision)
     {
-        case ADAPTIVE_DECISION_PREDICT_LEFT:
-            return "PREDICT LEFT";
+    case ADAPTIVE_DECISION_PREDICT_LEFT:
+        return "PREDICT LEFT";
 
-        case ADAPTIVE_DECISION_PREDICT_RIGHT:
-            return "PREDICT RIGHT";
+    case ADAPTIVE_DECISION_PREDICT_RIGHT:
+        return "PREDICT RIGHT";
 
-        case ADAPTIVE_DECISION_PREDICT_UP:
-            return "PREDICT UP";
+    case ADAPTIVE_DECISION_PREDICT_UP:
+        return "PREDICT UP";
 
-        case ADAPTIVE_DECISION_PREDICT_DOWN:
-            return "PREDICT DOWN";
+    case ADAPTIVE_DECISION_PREDICT_DOWN:
+        return "PREDICT DOWN";
 
-        case ADAPTIVE_DECISION_ATTACK_AGGRESSIVE:
-            return "ATTACK AGGRESSIVE";
+    case ADAPTIVE_DECISION_ATTACK_AGGRESSIVE:
+        return "ATTACK AGGRESSIVE";
 
-        case ADAPTIVE_DECISION_ATTACK_DEFENSIVE:
-            return "ATTACK DEFENSIVE";
+    case ADAPTIVE_DECISION_ATTACK_DEFENSIVE:
+        return "ATTACK DEFENSIVE";
 
-        case ADAPTIVE_DECISION_FLANK_LEFT:
-            return "FLANK LEFT";
+    case ADAPTIVE_DECISION_FLANK_LEFT:
+        return "FLANK LEFT";
 
-        case ADAPTIVE_DECISION_FLANK_RIGHT:
-            return "FLANK RIGHT";
+    case ADAPTIVE_DECISION_FLANK_RIGHT:
+        return "FLANK RIGHT";
 
-        case ADAPTIVE_DECISION_CLOSE_DISTANCE:
-            return "CLOSE DISTANCE";
+    case ADAPTIVE_DECISION_CLOSE_DISTANCE:
+        return "CLOSE DISTANCE";
 
-        case ADAPTIVE_DECISION_KEEP_DISTANCE:
-            return "KEEP DISTANCE";
+    case ADAPTIVE_DECISION_KEEP_DISTANCE:
+        return "KEEP DISTANCE";
 
-        case ADAPTIVE_DECISION_NONE:
-        default:
-            return "NONE";
+    case ADAPTIVE_DECISION_NONE:
+    default:
+        return "NONE";
     }
 }
