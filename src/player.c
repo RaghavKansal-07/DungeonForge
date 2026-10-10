@@ -11,6 +11,23 @@
 
 static Player player;
 
+static void Player_PushMoveEvent(
+    MoveDirection direction,
+    float value
+)
+{
+    GameEvent event = {0};
+
+    event.type = EVENT_PLAYER_MOVE;
+    event.move_direction = direction;
+    event.dodge_direction = DODGE_NONE;
+    event.value = value;
+    event.x = player.x;
+    event.y = player.y;
+
+    Events_Push(event);
+}
+
 #define PLAYER_MAX_HEALTH 100
 #define HEALTH_POTION_HEAL 25
 
@@ -331,7 +348,7 @@ void Player_Update(void)
          * Convert dodge vector into primary
          * cardinal direction.
          */
-        if (fabsf(dodge_x) >
+        if (fabsf(dodge_x) >=
             fabsf(dodge_y))
         {
             if (dodge_x < 0.0f)
@@ -464,67 +481,27 @@ void Player_Update(void)
         }
     }
 
-    /*
+        /*
      * -----------------------------------------------------
-     * Player Movement Event
+     * Player Movement Events
      * -----------------------------------------------------
+     *
+     * Each active axis produces its own event, so a
+     * diagonal (W+D) counts as both UP and RIGHT instead
+     * of being recorded as vertical only.
      */
 
-    if (!player.dodging &&
-        (direction_x != 0.0f ||
-         direction_y != 0.0f))
+    if (!player.dodging)
     {
-        GameEvent move_event;
+        if (direction_x < 0.0f)
+            Player_PushMoveEvent(MOVE_LEFT, direction_length);
+        else if (direction_x > 0.0f)
+            Player_PushMoveEvent(MOVE_RIGHT, direction_length);
 
-        move_event.type =
-            EVENT_PLAYER_MOVE;
-
-        move_event.dodge_direction =
-            DODGE_NONE;
-
-        move_event.move_direction =
-            MOVE_NONE;
-
-        if (fabsf(direction_x) >
-            fabsf(direction_y))
-        {
-            if (direction_x < 0.0f)
-            {
-                move_event.move_direction =
-                    MOVE_LEFT;
-            }
-            else
-            {
-                move_event.move_direction =
-                    MOVE_RIGHT;
-            }
-        }
-        else
-        {
-            if (direction_y < 0.0f)
-            {
-                move_event.move_direction =
-                    MOVE_UP;
-            }
-            else
-            {
-                move_event.move_direction =
-                    MOVE_DOWN;
-            }
-        }
-
-        move_event.value =
-            direction_length;
-
-        move_event.x =
-            player.x;
-
-        move_event.y =
-            player.y;
-
-        Events_Push(
-            move_event
-        );
+        if (direction_y < 0.0f)
+            Player_PushMoveEvent(MOVE_UP, direction_length);
+        else if (direction_y > 0.0f)
+            Player_PushMoveEvent(MOVE_DOWN, direction_length);
     }
 
     /*
