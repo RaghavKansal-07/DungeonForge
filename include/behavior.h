@@ -5,7 +5,6 @@
 
 #include "events.h"
 
-
 /*
  * ---------------------------------------------------------
  * PLAYER BEHAVIOR PROFILE
@@ -19,7 +18,6 @@
  * No machine learning is used.
  * The system uses counters, averages and probabilities.
  */
-
 
 /*
  * ---------------------------------------------------------
@@ -37,7 +35,6 @@ typedef struct
 
     int total_attacks;
 
-
     /*
      * -----------------------------------------------------
      * Movement Behavior
@@ -50,7 +47,6 @@ typedef struct
     int move_right_count;
     int move_up_count;
     int move_down_count;
-
 
     /*
      * -----------------------------------------------------
@@ -65,7 +61,6 @@ typedef struct
     int dodge_up_count;
     int dodge_down_count;
 
-
     /*
      * -----------------------------------------------------
      * Damage / Aggression Behavior
@@ -77,7 +72,6 @@ typedef struct
     int damage_events;
 
     int total_healing;
-
 
     /*
      * -----------------------------------------------------
@@ -97,7 +91,6 @@ typedef struct
     float dodge_up_probability;
     float dodge_down_probability;
 
-
     /*
      * -----------------------------------------------------
      * Combat Statistics
@@ -105,7 +98,6 @@ typedef struct
      */
 
     float average_damage_taken;
-
 
     /*
      * -----------------------------------------------------
@@ -120,7 +112,6 @@ typedef struct
 
 } PlayerBehavior;
 
-
 /*
  * ---------------------------------------------------------
  * BEHAVIOR SYSTEM
@@ -132,7 +123,6 @@ typedef struct
  */
 void Behavior_Init(void);
 
-
 /*
  * Process all pending gameplay events.
  *
@@ -141,12 +131,10 @@ void Behavior_Init(void);
  */
 void Behavior_Update(void);
 
-
 /*
  * Get the current player behavior profile.
  */
 const PlayerBehavior *Behavior_GetProfile(void);
-
 
 /*
  * ---------------------------------------------------------
@@ -159,48 +147,40 @@ const PlayerBehavior *Behavior_GetProfile(void);
  */
 float Behavior_GetMoveLeftProbability(void);
 
-
 /*
  * Get the probability that the player moves right.
  */
 float Behavior_GetMoveRightProbability(void);
-
 
 /*
  * Get the probability that the player moves up.
  */
 float Behavior_GetMoveUpProbability(void);
 
-
 /*
  * Get the probability that the player moves down.
  */
 float Behavior_GetMoveDownProbability(void);
-
 
 /*
  * Get the probability that the player dodges left.
  */
 float Behavior_GetDodgeLeftProbability(void);
 
-
 /*
  * Get the probability that the player dodges right.
  */
 float Behavior_GetDodgeRightProbability(void);
-
 
 /*
  * Get the probability that the player dodges up.
  */
 float Behavior_GetDodgeUpProbability(void);
 
-
 /*
  * Get the probability that the player dodges down.
  */
 float Behavior_GetDodgeDownProbability(void);
-
 
 /*
  * ---------------------------------------------------------
@@ -213,5 +193,18 @@ float Behavior_GetDodgeDownProbability(void);
  * information for adaptive AI decisions.
  */
 bool Behavior_HasEnoughData(void);
+
+/*
+ * Restore a previously saved behavior profile.
+ *
+ * Counters are validated and every derived value
+ * (probabilities, average damage) is recalculated,
+ * so a corrupt save cannot inject bad statistics.
+ *
+ * Returns false (and leaves the current profile
+ * unchanged) if the saved data is invalid.
+ */
+bool Behavior_Restore(
+    const PlayerBehavior *saved);
 
 #endif

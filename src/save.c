@@ -1,5 +1,5 @@
 #include "save.h"
-
+#include "behavior.h"
 #include "serialization.h"
 #include "player.h"
 #include "enemy.h"
@@ -27,7 +27,7 @@
  * Increase this whenever the save-file
  * format changes incompatibly.
  */
-#define SAVE_VERSION 2u
+#define SAVE_VERSION 3u
 
 /*
  * Maximum number of item drops that can
@@ -182,6 +182,12 @@ typedef struct
     EnemySaveData enemies[MAX_ENEMIES];
 
     ItemDropSaveData drops[SAVE_MAX_DROPS];
+
+    /*
+     * Learned player behavior, so enemies keep
+     * adapting after a load.
+     */
+    PlayerBehavior behavior;
 
 } SaveGameData;
 
@@ -405,6 +411,9 @@ bool Save_Game(void)
      * Write save file
      * -----------------------------------------------------
      */
+
+    save_data.behavior =
+        *Behavior_GetProfile();
 
     return Serialization_Write(
         SAVE_FILE,
@@ -682,6 +691,12 @@ bool Load_Game(void)
         {
             return false;
         }
+    }
+
+    if (!Behavior_Restore(
+            &save_data.behavior))
+    {
+        return false;
     }
 
     return true;

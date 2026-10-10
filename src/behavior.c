@@ -2,7 +2,6 @@
 
 #include <string.h>
 
-
 /*
  * ---------------------------------------------------------
  * PLAYER BEHAVIOR PROFILE
@@ -10,7 +9,6 @@
  */
 
 static PlayerBehavior behavior;
-
 
 /*
  * ---------------------------------------------------------
@@ -50,7 +48,6 @@ static void Behavior_UpdateMovementProbabilities(void)
         (float)behavior.move_down_count / total;
 }
 
-
 /*
  * Recalculate dodge probabilities from the
  * accumulated dodge counters.
@@ -83,7 +80,6 @@ static void Behavior_UpdateDodgeProbabilities(void)
         (float)behavior.dodge_down_count / total;
 }
 
-
 /*
  * ---------------------------------------------------------
  * INITIALIZATION
@@ -98,12 +94,10 @@ void Behavior_Init(void)
     memset(
         &behavior,
         0,
-        sizeof(PlayerBehavior)
-    );
+        sizeof(PlayerBehavior));
 
     behavior.initialized = true;
 }
-
 
 /*
  * ---------------------------------------------------------
@@ -129,13 +123,12 @@ void Behavior_Update(void)
              * -------------------------------------------------
              */
 
-            case EVENT_PLAYER_ATTACK:
-            {
-                behavior.total_attacks++;
+        case EVENT_PLAYER_ATTACK:
+        {
+            behavior.total_attacks++;
 
-                break;
-            }
-
+            break;
+        }
 
             /*
              * -------------------------------------------------
@@ -143,39 +136,38 @@ void Behavior_Update(void)
              * -------------------------------------------------
              */
 
-            case EVENT_PLAYER_MOVE:
+        case EVENT_PLAYER_MOVE:
+        {
+            behavior.total_movements++;
+
+            switch (event.move_direction)
             {
-                behavior.total_movements++;
+            case MOVE_LEFT:
+                behavior.move_left_count++;
+                break;
 
-                switch (event.move_direction)
-                {
-                    case MOVE_LEFT:
-                        behavior.move_left_count++;
-                        break;
+            case MOVE_RIGHT:
+                behavior.move_right_count++;
+                break;
 
-                    case MOVE_RIGHT:
-                        behavior.move_right_count++;
-                        break;
+            case MOVE_UP:
+                behavior.move_up_count++;
+                break;
 
-                    case MOVE_UP:
-                        behavior.move_up_count++;
-                        break;
+            case MOVE_DOWN:
+                behavior.move_down_count++;
+                break;
 
-                    case MOVE_DOWN:
-                        behavior.move_down_count++;
-                        break;
-
-                    case MOVE_NONE:
-                    default:
-                        /*
-                         * No valid movement direction.
-                         */
-                        break;
-                }
-
+            case MOVE_NONE:
+            default:
+                /*
+                 * No valid movement direction.
+                 */
                 break;
             }
 
+            break;
+        }
 
             /*
              * -------------------------------------------------
@@ -189,39 +181,38 @@ void Behavior_Update(void)
              * cardinal direction.
              */
 
-            case EVENT_PLAYER_DODGE:
+        case EVENT_PLAYER_DODGE:
+        {
+            behavior.total_dodges++;
+
+            switch (event.dodge_direction)
             {
-                behavior.total_dodges++;
+            case DODGE_LEFT:
+                behavior.dodge_left_count++;
+                break;
 
-                switch (event.dodge_direction)
-                {
-                    case DODGE_LEFT:
-                        behavior.dodge_left_count++;
-                        break;
+            case DODGE_RIGHT:
+                behavior.dodge_right_count++;
+                break;
 
-                    case DODGE_RIGHT:
-                        behavior.dodge_right_count++;
-                        break;
+            case DODGE_UP:
+                behavior.dodge_up_count++;
+                break;
 
-                    case DODGE_UP:
-                        behavior.dodge_up_count++;
-                        break;
+            case DODGE_DOWN:
+                behavior.dodge_down_count++;
+                break;
 
-                    case DODGE_DOWN:
-                        behavior.dodge_down_count++;
-                        break;
-
-                    case DODGE_NONE:
-                    default:
-                        /*
-                         * No valid dodge direction.
-                         */
-                        break;
-                }
-
+            case DODGE_NONE:
+            default:
+                /*
+                 * No valid dodge direction.
+                 */
                 break;
             }
 
+            break;
+        }
 
             /*
              * -------------------------------------------------
@@ -229,19 +220,18 @@ void Behavior_Update(void)
              * -------------------------------------------------
              */
 
-            case EVENT_PLAYER_DAMAGE:
+        case EVENT_PLAYER_DAMAGE:
+        {
+            behavior.damage_events++;
+
+            if (event.value > 0.0f)
             {
-                behavior.damage_events++;
-
-                if (event.value > 0.0f)
-                {
-                    behavior.total_damage_taken +=
-                        (int)event.value;
-                }
-
-                break;
+                behavior.total_damage_taken +=
+                    (int)event.value;
             }
 
+            break;
+        }
 
             /*
              * -------------------------------------------------
@@ -249,17 +239,16 @@ void Behavior_Update(void)
              * -------------------------------------------------
              */
 
-            case EVENT_PLAYER_HEAL:
+        case EVENT_PLAYER_HEAL:
+        {
+            if (event.value > 0.0f)
             {
-                if (event.value > 0.0f)
-                {
-                    behavior.total_healing +=
-                        (int)event.value;
-                }
-
-                break;
+                behavior.total_healing +=
+                    (int)event.value;
             }
 
+            break;
+        }
 
             /*
              * -------------------------------------------------
@@ -267,17 +256,16 @@ void Behavior_Update(void)
              * -------------------------------------------------
              */
 
-            case EVENT_ENEMY_DAMAGED:
-            case EVENT_NONE:
-            default:
-                /*
-                 * These events are not currently used
-                 * by the behavior analyzer.
-                 */
-                break;
+        case EVENT_ENEMY_DAMAGED:
+        case EVENT_NONE:
+        default:
+            /*
+             * These events are not currently used
+             * by the behavior analyzer.
+             */
+            break;
         }
     }
-
 
     /*
      * ---------------------------------------------------------
@@ -288,7 +276,6 @@ void Behavior_Update(void)
     Behavior_UpdateMovementProbabilities();
 
     Behavior_UpdateDodgeProbabilities();
-
 
     /*
      * Calculate average damage taken per damage event.
@@ -305,7 +292,6 @@ void Behavior_Update(void)
     }
 }
 
-
 /*
  * ---------------------------------------------------------
  * PROFILE ACCESS
@@ -317,6 +303,78 @@ const PlayerBehavior *Behavior_GetProfile(void)
     return &behavior;
 }
 
+bool Behavior_Restore(
+    const PlayerBehavior *saved)
+{
+    if (saved == NULL)
+        return false;
+
+    /*
+     * Reject impossible counters.
+     */
+    const int counters[] =
+        {
+            saved->total_attacks,
+            saved->total_movements,
+            saved->move_left_count,
+            saved->move_right_count,
+            saved->move_up_count,
+            saved->move_down_count,
+            saved->total_dodges,
+            saved->dodge_left_count,
+            saved->dodge_right_count,
+            saved->dodge_up_count,
+            saved->dodge_down_count,
+            saved->total_damage_taken,
+            saved->damage_events,
+            saved->total_healing};
+
+    const int counter_count =
+        sizeof(counters) / sizeof(counters[0]);
+
+    for (int i = 0; i < counter_count; i++)
+    {
+        if (counters[i] < 0)
+            return false;
+    }
+
+    /*
+     * A direction count can never exceed its total.
+     */
+    if (saved->move_left_count > saved->total_movements ||
+        saved->move_right_count > saved->total_movements ||
+        saved->move_up_count > saved->total_movements ||
+        saved->move_down_count > saved->total_movements ||
+        saved->dodge_left_count > saved->total_dodges ||
+        saved->dodge_right_count > saved->total_dodges ||
+        saved->dodge_up_count > saved->total_dodges ||
+        saved->dodge_down_count > saved->total_dodges)
+    {
+        return false;
+    }
+
+    behavior = *saved;
+    behavior.initialized = true;
+
+    /*
+     * Never trust saved derived values.
+     */
+    Behavior_UpdateMovementProbabilities();
+    Behavior_UpdateDodgeProbabilities();
+
+    if (behavior.damage_events > 0)
+    {
+        behavior.average_damage_taken =
+            (float)behavior.total_damage_taken /
+            (float)behavior.damage_events;
+    }
+    else
+    {
+        behavior.average_damage_taken = 0.0f;
+    }
+
+    return true;
+}
 
 /*
  * ---------------------------------------------------------
@@ -329,24 +387,20 @@ float Behavior_GetMoveLeftProbability(void)
     return behavior.move_left_probability;
 }
 
-
 float Behavior_GetMoveRightProbability(void)
 {
     return behavior.move_right_probability;
 }
-
 
 float Behavior_GetMoveUpProbability(void)
 {
     return behavior.move_up_probability;
 }
 
-
 float Behavior_GetMoveDownProbability(void)
 {
     return behavior.move_down_probability;
 }
-
 
 /*
  * ---------------------------------------------------------
@@ -359,24 +413,20 @@ float Behavior_GetDodgeLeftProbability(void)
     return behavior.dodge_left_probability;
 }
 
-
 float Behavior_GetDodgeRightProbability(void)
 {
     return behavior.dodge_right_probability;
 }
-
 
 float Behavior_GetDodgeUpProbability(void)
 {
     return behavior.dodge_up_probability;
 }
 
-
 float Behavior_GetDodgeDownProbability(void)
 {
     return behavior.dodge_down_probability;
 }
-
 
 /*
  * ---------------------------------------------------------
