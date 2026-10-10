@@ -10,13 +10,13 @@
 #include <stdbool.h>
 
 #define ENEMY_DETECTION_RANGE 250.0f
-#define ENEMY_LOSE_RANGE      350.0f
+#define ENEMY_LOSE_RANGE 350.0f
 
-#define ENEMY_ATTACK_RANGE    50.0f
-#define ENEMY_ATTACK_DAMAGE   10
+#define ENEMY_ATTACK_RANGE 50.0f
+#define ENEMY_ATTACK_DAMAGE 10
 
 #define ENEMY_PATH_UPDATE_TIME 0.20f
-#define ENEMY_AWARENESS_TIME   1.50f
+#define ENEMY_AWARENESS_TIME 1.50f
 
 /*
  * If an enemy cannot make meaningful progress
@@ -30,30 +30,29 @@
  */
 #define ENEMY_MAX_MOVE_STEP 4.0f
 
-
 /*
  * ---------------------------------------------------------
  * Boss configuration
  * ---------------------------------------------------------
  */
 
-#define BOSS_DETECTION_RANGE      400.0f
-#define BOSS_LOSE_RANGE           550.0f
+#define BOSS_DETECTION_RANGE 400.0f
+#define BOSS_LOSE_RANGE 550.0f
 
-#define BOSS_ATTACK_RANGE         60.0f
-#define BOSS_ATTACK_EXIT_RANGE    72.0f
-#define BOSS_ATTACK_DAMAGE        15
+#define BOSS_ATTACK_RANGE 60.0f
+#define BOSS_ATTACK_EXIT_RANGE 72.0f
+#define BOSS_ATTACK_DAMAGE 15
 
-#define BOSS_SPECIAL_RANGE        120.0f
-#define BOSS_SPECIAL_DAMAGE       20
+#define BOSS_SPECIAL_RANGE 120.0f
+#define BOSS_SPECIAL_DAMAGE 20
 
-#define BOSS_SPECIAL_COOLDOWN     5.0f
-#define BOSS_RECOVERY_TIME        1.0f
+#define BOSS_SPECIAL_COOLDOWN 5.0f
+#define BOSS_RECOVERY_TIME 1.0f
 
-#define BOSS_ENRAGED_SPEED        210.0f
+#define BOSS_ENRAGED_SPEED 210.0f
 
-#define BOSS_PHASE_TWO_HEALTH     0.70f
-#define BOSS_PHASE_THREE_HEALTH   0.40f
+#define BOSS_PHASE_TWO_HEALTH 0.70f
+#define BOSS_PHASE_THREE_HEALTH 0.40f
 
 /*
  * Boss-specific navigation tuning.
@@ -62,8 +61,8 @@
  * so tiny movements around a wall corner should not
  * be considered meaningful progress.
  */
-#define BOSS_STUCK_TIME            0.20f
-#define BOSS_MIN_PROGRESS          0.75f
+#define BOSS_STUCK_TIME 0.20f
+#define BOSS_MIN_PROGRESS 0.75f
 
 /*
  * ---------------------------------------------------------
@@ -78,9 +77,9 @@
  * physical space and allow the player/boss to
  * reposition.
  */
-#define BOSS_YIELD_TIME            0.18f
-#define BOSS_YIELD_STEP            7.0f
-#define BOSS_CONTACT_DISTANCE      58.0f
+#define BOSS_YIELD_TIME 0.18f
+#define BOSS_YIELD_STEP 7.0f
+#define BOSS_CONTACT_DISTANCE 58.0f
 
 /*
  * Local boss escape steering.
@@ -89,10 +88,9 @@
  * The boss therefore samples several directions and looks ahead
  * before choosing where to create space.
  */
-#define BOSS_ESCAPE_PROBE_STEP      4.0f
-#define BOSS_ESCAPE_PROBE_COUNT     10
-#define BOSS_ESCAPE_ANGLE_STEP      22.5f
-
+#define BOSS_ESCAPE_PROBE_STEP 4.0f
+#define BOSS_ESCAPE_PROBE_COUNT 10
+#define BOSS_ESCAPE_ANGLE_STEP 22.5f
 
 typedef enum
 {
@@ -100,7 +98,6 @@ typedef enum
     ENEMY_CHASE_PATH
 
 } EnemyChaseMode;
-
 
 static EnemyChaseMode chase_modes[MAX_ENEMIES];
 
@@ -134,7 +131,6 @@ static float steering_memory_timer[MAX_ENEMIES];
 #define ENEMY_STEERING_MEMORY_TIME 0.20f
 #define ENEMY_STEERING_TURN_PENALTY 18.0f
 
-
 /*
  * Calculate distance between two points.
  */
@@ -142,18 +138,15 @@ static float DistanceBetween(
     float x1,
     float y1,
     float x2,
-    float y2
-)
+    float y2)
 {
     float dx = x2 - x1;
     float dy = y2 - y1;
 
     return sqrtf(
         dx * dx +
-        dy * dy
-    );
+        dy * dy);
 }
-
 
 /*
  * Try one complete movement step.
@@ -168,8 +161,7 @@ static bool Enemy_TryMove(
     Enemy *enemy,
     float direction_x,
     float direction_y,
-    float move_distance
-)
+    float move_distance)
 {
     float move_x =
         direction_x * move_distance;
@@ -192,7 +184,6 @@ static bool Enemy_TryMove(
     return true;
 }
 
-
 /*
  * Move the enemy toward a target.
  *
@@ -206,8 +197,7 @@ static bool Enemy_MoveToward(
     int enemy_index,
     Enemy *enemy,
     float target_x,
-    float target_y
-)
+    float target_y)
 {
     float dt =
         GetFrameTime();
@@ -231,8 +221,7 @@ static bool Enemy_MoveToward(
     int steps =
         (int)ceilf(
             total_distance /
-            ENEMY_MAX_MOVE_STEP
-        );
+            ENEMY_MAX_MOVE_STEP);
 
     if (steps < 1)
         steps = 1;
@@ -256,8 +245,7 @@ static bool Enemy_MoveToward(
         float distance =
             sqrtf(
                 dx * dx +
-                dy * dy
-            );
+                dy * dy);
 
         if (distance <= 0.001f)
             break;
@@ -281,10 +269,10 @@ static bool Enemy_MoveToward(
                 enemy_index,
                 enemy->x +
                     direction_x *
-                    step_distance,
+                        step_distance,
                 enemy->y +
                     direction_y *
-                    step_distance,
+                        step_distance,
                 enemy->radius))
         {
             if (Enemy_TryMove(
@@ -333,31 +321,30 @@ static bool Enemy_MoveToward(
          * changing sides every frame.
          */
         static const float angles[] =
-        {
-             15.0f,
-            -15.0f,
-             30.0f,
-            -30.0f,
-             45.0f,
-            -45.0f,
-             60.0f,
-            -60.0f,
-             75.0f,
-            -75.0f,
-             90.0f,
-            -90.0f,
-            105.0f,
-           -105.0f,
-            120.0f,
-           -120.0f,
-            135.0f,
-           -135.0f,
-            150.0f,
-           -150.0f,
-            165.0f,
-           -165.0f,
-            180.0f
-        };
+            {
+                15.0f,
+                -15.0f,
+                30.0f,
+                -30.0f,
+                45.0f,
+                -45.0f,
+                60.0f,
+                -60.0f,
+                75.0f,
+                -75.0f,
+                90.0f,
+                -90.0f,
+                105.0f,
+                -105.0f,
+                120.0f,
+                -120.0f,
+                135.0f,
+                -135.0f,
+                150.0f,
+                -150.0f,
+                165.0f,
+                -165.0f,
+                180.0f};
 
         const int angle_count =
             sizeof(angles) /
@@ -399,12 +386,12 @@ static bool Enemy_MoveToward(
             float candidate_position_x =
                 enemy->x +
                 candidate_x *
-                step_distance;
+                    step_distance;
 
             float candidate_position_y =
                 enemy->y +
                 candidate_y *
-                step_distance;
+                    step_distance;
 
             if (!Collision_EnemyCanMove(
                     enemy_index,
@@ -428,8 +415,7 @@ static bool Enemy_MoveToward(
                     remaining_dx *
                         remaining_dx +
                     remaining_dy *
-                        remaining_dy
-                );
+                        remaining_dy);
 
             float score =
                 remaining_distance;
@@ -501,7 +487,6 @@ static bool Enemy_MoveToward(
     return moved_anything;
 }
 
-
 /*
  * ---------------------------------------------------------
  * Boss direct movement
@@ -522,8 +507,7 @@ static bool Boss_MoveDirectToward(
     int enemy_index,
     Enemy *boss,
     float target_x,
-    float target_y
-)
+    float target_y)
 {
     float dt =
         GetFrameTime();
@@ -537,8 +521,7 @@ static bool Boss_MoveDirectToward(
     int steps =
         (int)ceilf(
             total_distance /
-            ENEMY_MAX_MOVE_STEP
-        );
+            ENEMY_MAX_MOVE_STEP);
 
     if (steps < 1)
         steps = 1;
@@ -562,8 +545,7 @@ static bool Boss_MoveDirectToward(
         float distance =
             sqrtf(
                 dx * dx +
-                dy * dy
-            );
+                dy * dy);
 
         if (distance <= 0.001f)
             break;
@@ -596,8 +578,7 @@ static bool Boss_MoveDirectToward(
 static bool Enemy_UpdatePath(
     Enemy *enemy,
     float goal_x,
-    float goal_y
-)
+    float goal_y)
 {
     float next_x;
     float next_y;
@@ -610,8 +591,7 @@ static bool Enemy_UpdatePath(
             goal_y,
             enemy->radius,
             &next_x,
-            &next_y
-        );
+            &next_y);
 
     if (!found)
     {
@@ -631,14 +611,12 @@ static bool Enemy_UpdatePath(
     return true;
 }
 
-
 /*
  * Reset navigation state for one enemy.
  */
 static void Enemy_ResetNavigation(
     int index,
-    Enemy *enemy
-)
+    Enemy *enemy)
 {
     enemy->path_valid = false;
     enemy->path_timer = 0.0f;
@@ -661,15 +639,13 @@ static void Enemy_ResetNavigation(
         0.0f;
 }
 
-
 /*
  * Update how long the enemy has been
  * unable to make progress.
  */
 static void Enemy_UpdateStuckTimer(
     int index,
-    bool moved
-)
+    bool moved)
 {
     float dt =
         GetFrameTime();
@@ -688,18 +664,15 @@ static void Enemy_UpdateStuckTimer(
     stuck_timers[index] += dt;
 }
 
-
 /*
  * Check whether the enemy has been stuck.
  */
 static bool Enemy_IsStuck(
-    int index
-)
+    int index)
 {
     return stuck_timers[index] >=
            ENEMY_STUCK_TIME;
 }
-
 
 /*
  * ---------------------------------------------------------
@@ -711,8 +684,7 @@ static void Enemy_GetPredictedTarget(
     Enemy *enemy,
     Player *player,
     float *target_x,
-    float *target_y
-)
+    float *target_y)
 {
     *target_x = player->x;
     *target_y = player->y;
@@ -722,175 +694,160 @@ static void Enemy_GetPredictedTarget(
 
     switch (enemy->adaptive_decision)
     {
-        case ADAPTIVE_DECISION_PREDICT_LEFT:
-            *target_x -= prediction_distance;
-            break;
+    case ADAPTIVE_DECISION_PREDICT_LEFT:
+        *target_x -= prediction_distance;
+        break;
 
-        case ADAPTIVE_DECISION_PREDICT_RIGHT:
-            *target_x += prediction_distance;
-            break;
+    case ADAPTIVE_DECISION_PREDICT_RIGHT:
+        *target_x += prediction_distance;
+        break;
 
-        case ADAPTIVE_DECISION_PREDICT_UP:
-            *target_y -= prediction_distance;
-            break;
+    case ADAPTIVE_DECISION_PREDICT_UP:
+        *target_y -= prediction_distance;
+        break;
 
-        case ADAPTIVE_DECISION_PREDICT_DOWN:
-            *target_y += prediction_distance;
-            break;
+    case ADAPTIVE_DECISION_PREDICT_DOWN:
+        *target_y += prediction_distance;
+        break;
 
-        default:
-            break;
+    default:
+        break;
     }
 }
-
 
 static void Enemy_GetFlankTarget(
     Enemy *enemy,
     Player *player,
     float *target_x,
-    float *target_y
-)
+    float *target_y)
 {
-    float dx =
-        player->x - enemy->x;
+    /*
+     * Flank targets are in WORLD space, matching how the
+     * behavior profile records dodges:
+     *
+     *   FLANK_LEFT  -> left of the player on screen
+     *   FLANK_RIGHT -> right of the player on screen
+     *
+     * The distance must stay inside the attack range
+     * (50 px) so a flanking enemy can still hit, but
+     * outside the minimum collision distance
+     * (enemy radius + player radius = 40 px).
+     */
+    const float flank_distance = 44.0f;
 
-    float dy =
-        player->y - enemy->y;
+    float side =
+        (enemy->adaptive_decision ==
+         ADAPTIVE_DECISION_FLANK_RIGHT)
+            ? 1.0f
+            : -1.0f;
 
-    float distance =
-        sqrtf(
-            dx * dx +
-            dy * dy
-        );
+    float candidate_x =
+        player->x +
+        side * flank_distance;
 
-    if (distance <= 0.001f)
+    float candidate_y =
+        player->y;
+
+    /*
+     * If the flank point is inside a wall, fall back
+     * to chasing the player directly.
+     */
+    if (Collision_CanMove(
+            candidate_x,
+            candidate_y,
+            enemy->radius))
+    {
+        *target_x = candidate_x;
+        *target_y = candidate_y;
+    }
+    else
     {
         *target_x = player->x;
         *target_y = player->y;
-        return;
     }
-
-    dx /= distance;
-    dy /= distance;
-
-    float perpendicular_x =
-        -dy;
-
-    float perpendicular_y =
-        dx;
-
-    const float flank_distance =
-        70.0f;
-
-    if (enemy->adaptive_decision ==
-        ADAPTIVE_DECISION_FLANK_RIGHT)
-    {
-        perpendicular_x =
-            -perpendicular_x;
-
-        perpendicular_y =
-            -perpendicular_y;
-    }
-
-    *target_x =
-        player->x +
-        perpendicular_x *
-        flank_distance;
-
-    *target_y =
-        player->y +
-        perpendicular_y *
-        flank_distance;
 }
-
 
 static bool Enemy_GetAdaptiveTarget(
     Enemy *enemy,
     Player *player,
     float *target_x,
-    float *target_y
-)
+    float *target_y)
 {
     if (enemy->adaptation_level <= 0.0f)
         return false;
 
     switch (enemy->adaptive_decision)
     {
-        case ADAPTIVE_DECISION_PREDICT_LEFT:
-        case ADAPTIVE_DECISION_PREDICT_RIGHT:
-        case ADAPTIVE_DECISION_PREDICT_UP:
-        case ADAPTIVE_DECISION_PREDICT_DOWN:
-        {
-            Enemy_GetPredictedTarget(
-                enemy,
-                player,
-                target_x,
-                target_y
-            );
+    case ADAPTIVE_DECISION_PREDICT_LEFT:
+    case ADAPTIVE_DECISION_PREDICT_RIGHT:
+    case ADAPTIVE_DECISION_PREDICT_UP:
+    case ADAPTIVE_DECISION_PREDICT_DOWN:
+    {
+        Enemy_GetPredictedTarget(
+            enemy,
+            player,
+            target_x,
+            target_y);
 
+        return true;
+    }
+
+    case ADAPTIVE_DECISION_FLANK_LEFT:
+    case ADAPTIVE_DECISION_FLANK_RIGHT:
+    {
+        Enemy_GetFlankTarget(
+            enemy,
+            player,
+            target_x,
+            target_y);
+
+        return true;
+    }
+
+    case ADAPTIVE_DECISION_CLOSE_DISTANCE:
+    {
+        float dx =
+            player->x - enemy->x;
+
+        float dy =
+            player->y - enemy->y;
+
+        float distance =
+            sqrtf(
+                dx * dx +
+                dy * dy);
+
+        if (distance <= 0.001f)
+        {
+            *target_x = player->x;
+            *target_y = player->y;
             return true;
         }
 
-        case ADAPTIVE_DECISION_FLANK_LEFT:
-        case ADAPTIVE_DECISION_FLANK_RIGHT:
-        {
-            Enemy_GetFlankTarget(
-                enemy,
-                player,
-                target_x,
-                target_y
-            );
+        dx /= distance;
+        dy /= distance;
 
-            return true;
-        }
+        const float desired_distance =
+            BOSS_ATTACK_RANGE * 0.75f;
 
-        case ADAPTIVE_DECISION_CLOSE_DISTANCE:
-        {
-            float dx =
-                player->x - enemy->x;
+        *target_x =
+            player->x -
+            dx * desired_distance;
 
-            float dy =
-                player->y - enemy->y;
+        *target_y =
+            player->y -
+            dy * desired_distance;
 
-            float distance =
-                sqrtf(
-                    dx * dx +
-                    dy * dy
-                );
+        return true;
+    }
 
-            if (distance <= 0.001f)
-            {
-                *target_x = player->x;
-                *target_y = player->y;
-                return true;
-            }
-
-            dx /= distance;
-            dy /= distance;
-
-            const float desired_distance =
-                BOSS_ATTACK_RANGE * 0.75f;
-
-            *target_x =
-                player->x -
-                dx * desired_distance;
-
-            *target_y =
-                player->y -
-                dy * desired_distance;
-
-            return true;
-        }
-
-        default:
-            return false;
+    default:
+        return false;
     }
 }
 
-
 static bool Enemy_ShouldAdaptAttack(
-    const Enemy *enemy
-)
+    const Enemy *enemy)
 {
     if (enemy->adaptation_level <= 0.0f)
         return false;
@@ -906,7 +863,6 @@ static bool Enemy_ShouldAdaptAttack(
     return false;
 }
 
-
 /*
  * ---------------------------------------------------------
  * Boss AI
@@ -914,8 +870,7 @@ static bool Enemy_ShouldAdaptAttack(
  */
 
 static BossPhase Boss_GetPhase(
-    const Enemy *boss
-)
+    const Enemy *boss)
 {
     if (boss->max_health <= 0)
         return BOSS_PHASE_ONE;
@@ -939,10 +894,8 @@ static BossPhase Boss_GetPhase(
     return BOSS_PHASE_ONE;
 }
 
-
 static void Boss_UpdatePhase(
-    Enemy *boss
-)
+    Enemy *boss)
 {
     BossPhase new_phase =
         Boss_GetPhase(boss);
@@ -953,7 +906,7 @@ static void Boss_UpdatePhase(
         boss->boss_phase =
             new_phase;
 
-        Audio_PlayBossPhase();    
+        Audio_PlayBossPhase();
 
         boss->boss_state_timer =
             0.0f;
@@ -991,31 +944,26 @@ static void Boss_UpdatePhase(
     }
 }
 
-
 static bool Boss_CanUseSpecial(
-    const Enemy *boss
-)
+    const Enemy *boss)
 {
     return boss->boss_special_timer <=
            0.0f;
 }
 
-
 static void Boss_PerformSpecial(
     Enemy *boss,
-    Player *player
-)
+    Player *player)
 {
     float distance =
         DistanceBetween(
             boss->x,
             boss->y,
             player->x,
-            player->y
-        );
+            player->y);
 
     if (distance <=
-        BOSS_SPECIAL_RANGE &&
+            BOSS_SPECIAL_RANGE &&
         Collision_HasLineOfSight(
             boss->x,
             boss->y,
@@ -1023,29 +971,28 @@ static void Boss_PerformSpecial(
             player->y))
     {
         Player_TakeDamage(
-            BOSS_SPECIAL_DAMAGE
-        );
+            BOSS_SPECIAL_DAMAGE);
         Audio_PlayBossAttack();
     }
 
     switch (boss->boss_phase)
     {
-        case BOSS_PHASE_ONE:
-            boss->boss_special_timer =
-                BOSS_SPECIAL_COOLDOWN;
-            break;
+    case BOSS_PHASE_ONE:
+        boss->boss_special_timer =
+            BOSS_SPECIAL_COOLDOWN;
+        break;
 
-        case BOSS_PHASE_TWO:
-            boss->boss_special_timer =
-                BOSS_SPECIAL_COOLDOWN *
-                0.80f;
-            break;
+    case BOSS_PHASE_TWO:
+        boss->boss_special_timer =
+            BOSS_SPECIAL_COOLDOWN *
+            0.80f;
+        break;
 
-        case BOSS_PHASE_THREE:
-            boss->boss_special_timer =
-                BOSS_SPECIAL_COOLDOWN *
-                0.60f;
-            break;
+    case BOSS_PHASE_THREE:
+        boss->boss_special_timer =
+            BOSS_SPECIAL_COOLDOWN *
+            0.60f;
+        break;
     }
 
     boss->boss_recovery_timer =
@@ -1055,13 +1002,11 @@ static void Boss_PerformSpecial(
         BOSS_STATE_RECOVER;
 }
 
-
 static void Boss_GetMovementTarget(
     Enemy *boss,
     Player *player,
     float *target_x,
-    float *target_y
-)
+    float *target_y)
 {
     *target_x =
         player->x;
@@ -1073,10 +1018,8 @@ static void Boss_GetMovementTarget(
         boss,
         player,
         target_x,
-        target_y
-    );
+        target_y);
 }
-
 
 /*
  * ---------------------------------------------------------
@@ -1102,8 +1045,7 @@ static void Boss_GetMovementTarget(
 static bool Boss_TryYield(
     int index,
     Enemy *boss,
-    Player *player
-)
+    Player *player)
 {
     /*
      * ---------------------------------------------------------
@@ -1137,8 +1079,7 @@ static bool Boss_TryYield(
     float distance =
         sqrtf(
             dx * dx +
-            dy * dy
-        );
+            dy * dy);
 
     if (distance <= 0.001f)
     {
@@ -1212,10 +1153,10 @@ static bool Boss_TryYield(
                 index,
                 boss->x +
                     direction_x *
-                    BOSS_YIELD_STEP,
+                        BOSS_YIELD_STEP,
                 boss->y +
                     direction_y *
-                    BOSS_YIELD_STEP,
+                        BOSS_YIELD_STEP,
                 boss->radius))
         {
             continue;
@@ -1246,12 +1187,12 @@ static bool Boss_TryYield(
             float probe_x =
                 boss->x +
                 direction_x *
-                probe_distance;
+                    probe_distance;
 
             float probe_y =
                 boss->y +
                 direction_y *
-                probe_distance;
+                    probe_distance;
 
             if (!Collision_EnemyCanMove(
                     index,
@@ -1280,20 +1221,19 @@ static bool Boss_TryYield(
         float probe_x =
             boss->x +
             direction_x *
-            clearance;
+                clearance;
 
         float probe_y =
             boss->y +
             direction_y *
-            clearance;
+                clearance;
 
         float final_distance =
             DistanceBetween(
                 probe_x,
                 probe_y,
                 player->x,
-                player->y
-            );
+                player->y);
 
         float separation_gain =
             final_distance -
@@ -1430,7 +1370,6 @@ static bool Boss_TryYield(
     return true;
 }
 
-
 /*
  * ---------------------------------------------------------
  * Boss local obstacle steering
@@ -1467,8 +1406,7 @@ static bool Boss_TryLocalObstacleSteer(
     int index,
     Enemy *boss,
     float target_x,
-    float target_y
-)
+    float target_y)
 {
     float to_target_x =
         target_x - boss->x;
@@ -1479,8 +1417,7 @@ static bool Boss_TryLocalObstacleSteer(
     float target_distance =
         sqrtf(
             to_target_x * to_target_x +
-            to_target_y * to_target_y
-        );
+            to_target_y * to_target_y);
 
     if (target_distance <= 0.001f)
         return false;
@@ -1574,8 +1511,7 @@ static bool Boss_TryLocalObstacleSteer(
                 probe_x,
                 probe_y,
                 target_x,
-                target_y
-            );
+                target_y);
 
         float progress =
             target_distance -
@@ -1650,7 +1586,6 @@ static bool Boss_TryLocalObstacleSteer(
     return true;
 }
 
-
 /*
  * Boss movement.
  *
@@ -1680,8 +1615,7 @@ static bool Boss_TryLocalObstacleSteer(
 static void Boss_MoveTowardPlayer(
     int index,
     Enemy *boss,
-    Player *player
-)
+    Player *player)
 {
     /*
      * -------------------------------------------------
@@ -1717,24 +1651,21 @@ static void Boss_MoveTowardPlayer(
         boss,
         player,
         &target_x,
-        &target_y
-    );
+        &target_y);
 
     float target_distance_before =
         DistanceBetween(
             boss->x,
             boss->y,
             target_x,
-            target_y
-        );
+            target_y);
 
     bool has_line_of_sight =
         Collision_HasLineOfSight(
             boss->x,
             boss->y,
             player->x,
-            player->y
-        );
+            player->y);
 
     /*
      * -------------------------------------------------
@@ -1761,16 +1692,14 @@ static void Boss_MoveTowardPlayer(
                 index,
                 boss,
                 target_x,
-                target_y
-            );
+                target_y);
 
         float target_distance_after =
             DistanceBetween(
                 boss->x,
                 boss->y,
                 target_x,
-                target_y
-            );
+                target_y);
 
         /*
          * A movement that does not reduce the target
@@ -1781,7 +1710,7 @@ static void Boss_MoveTowardPlayer(
          */
         bool meaningful_progress =
             target_distance_before -
-            target_distance_after >=
+                target_distance_after >=
             BOSS_MIN_PROGRESS;
 
         if (!moved ||
@@ -1868,8 +1797,7 @@ static void Boss_MoveTowardPlayer(
                     index,
                     boss,
                     player->x,
-                    player->y
-                );
+                    player->y);
 
             if (fallback_moved)
             {
@@ -1878,11 +1806,10 @@ static void Boss_MoveTowardPlayer(
                         boss->x,
                         boss->y,
                         player->x,
-                        player->y
-                    );
+                        player->y);
 
                 if (target_distance_before -
-                    fallback_distance >=
+                        fallback_distance >=
                     BOSS_MIN_PROGRESS)
                 {
                     stuck_timers[index] -=
@@ -1944,7 +1871,6 @@ static void Boss_MoveTowardPlayer(
         return;
     }
 
-
     /*
      * -------------------------------------------------
      * PATH CHASE
@@ -1972,8 +1898,7 @@ static void Boss_MoveTowardPlayer(
             Enemy_UpdatePath(
                 boss,
                 target_x,
-                target_y
-            );
+                target_y);
 
         /*
          * If the adaptive target cannot be reached,
@@ -1987,8 +1912,7 @@ static void Boss_MoveTowardPlayer(
                 Enemy_UpdatePath(
                     boss,
                     player->x,
-                    player->y
-                );
+                    player->y);
         }
 
         boss->path_timer =
@@ -2012,28 +1936,25 @@ static void Boss_MoveTowardPlayer(
                 boss->x,
                 boss->y,
                 boss->waypoint_x,
-                boss->waypoint_y
-            );
+                boss->waypoint_y);
 
         bool moved =
             Boss_MoveDirectToward(
                 index,
                 boss,
                 boss->waypoint_x,
-                boss->waypoint_y
-            );
+                boss->waypoint_y);
 
         float waypoint_distance_after =
             DistanceBetween(
                 boss->x,
                 boss->y,
                 boss->waypoint_x,
-                boss->waypoint_y
-            );
+                boss->waypoint_y);
 
         bool meaningful_progress =
             waypoint_distance_before -
-            waypoint_distance_after >=
+                waypoint_distance_after >=
             BOSS_MIN_PROGRESS;
 
         if (!moved ||
@@ -2146,7 +2067,6 @@ static void Boss_MoveTowardPlayer(
         return;
     }
 
-
     /*
      * -------------------------------------------------
      * A* FAILURE FALLBACK
@@ -2162,28 +2082,25 @@ static void Boss_MoveTowardPlayer(
             boss->x,
             boss->y,
             player->x,
-            player->y
-        );
+            player->y);
 
     bool fallback_moved =
         Boss_MoveDirectToward(
             index,
             boss,
             player->x,
-            player->y
-        );
+            player->y);
 
     float player_distance_after =
         DistanceBetween(
             boss->x,
             boss->y,
             player->x,
-            player->y
-        );
+            player->y);
 
     bool meaningful_progress =
         player_distance_before -
-        player_distance_after >=
+            player_distance_after >=
         BOSS_MIN_PROGRESS;
 
     if (!fallback_moved ||
@@ -2238,15 +2155,13 @@ static void Boss_MoveTowardPlayer(
     }
 }
 
-
 /*
  * Boss FSM.
  */
 static void BossFSM_Update(
     int index,
     Enemy *boss,
-    Player *player
-)
+    Player *player)
 {
     float dt =
         GetFrameTime();
@@ -2256,8 +2171,7 @@ static void BossFSM_Update(
             boss->x,
             boss->y,
             player->x,
-            player->y
-        );
+            player->y);
 
     /*
      * Update timers.
@@ -2317,8 +2231,7 @@ static void BossFSM_Update(
      * Update health phase.
      */
     Boss_UpdatePhase(
-        boss
-    );
+        boss);
 
     /*
      * DEAD
@@ -2399,7 +2312,9 @@ static void BossFSM_Update(
         boss->boss_state !=
             BOSS_STATE_SPECIAL &&
         boss->boss_state !=
-            BOSS_STATE_RECOVER)
+            BOSS_STATE_RECOVER &&
+        boss->boss_state !=
+            BOSS_STATE_ATTACK)
     {
         boss->boss_state =
             BOSS_STATE_ENRAGED;
@@ -2407,109 +2322,183 @@ static void BossFSM_Update(
 
     switch (boss->boss_state)
     {
-        /*
-         * -------------------------------------------------
-         * BOSS IDLE
-         * -------------------------------------------------
-         */
-        case BOSS_STATE_IDLE:
+    /*
+     * -------------------------------------------------
+     * BOSS IDLE
+     * -------------------------------------------------
+     */
+    case BOSS_STATE_IDLE:
+    {
+        if (distance <=
+                BOSS_DETECTION_RANGE &&
+            Collision_HasLineOfSight(
+                boss->x,
+                boss->y,
+                player->x,
+                player->y))
         {
-            if (distance <=
-                    BOSS_DETECTION_RANGE &&
-                Collision_HasLineOfSight(
-                    boss->x,
-                    boss->y,
-                    player->x,
-                    player->y))
-            {
-                boss->state =
-                    ENEMY_STATE_CHASE;
+            boss->state =
+                ENEMY_STATE_CHASE;
 
-                boss->boss_state =
-                    BOSS_STATE_CHASE;
+            boss->boss_state =
+                BOSS_STATE_CHASE;
 
-                boss->target_x =
-                    player->x;
+            boss->target_x =
+                player->x;
 
-                boss->target_y =
-                    player->y;
+            boss->target_y =
+                player->y;
 
-                boss->path_valid =
-                    false;
+            boss->path_valid =
+                false;
 
-                boss->path_timer =
-                    0.0f;
+            boss->path_timer =
+                0.0f;
 
-                stuck_timers[index] =
-                    0.0f;
+            stuck_timers[index] =
+                0.0f;
 
-                chase_modes[index] =
-                    ENEMY_CHASE_DIRECT;
+            chase_modes[index] =
+                ENEMY_CHASE_DIRECT;
 
-                boss->boss_state_timer =
-                    0.0f;
+            boss->boss_state_timer =
+                0.0f;
 
-                boss_previous_target_distance[index] =
-                    0.0f;
-            }
+            boss_previous_target_distance[index] =
+                0.0f;
+        }
+
+        break;
+    }
+
+    /*
+     * -------------------------------------------------
+     * BOSS CHASE
+     * -------------------------------------------------
+     */
+    case BOSS_STATE_CHASE:
+    {
+        /*
+         * SPECIAL ATTACK
+         */
+        if (boss->boss_phase !=
+                BOSS_PHASE_ONE &&
+            Boss_CanUseSpecial(boss) &&
+            distance <=
+                BOSS_SPECIAL_RANGE &&
+            Collision_HasLineOfSight(
+                boss->x,
+                boss->y,
+                player->x,
+                player->y))
+        {
+            boss->boss_state =
+                BOSS_STATE_SPECIAL;
+
+            boss->state =
+                ENEMY_STATE_ATTACK;
+
+            Boss_PerformSpecial(
+                boss,
+                player);
 
             break;
         }
 
         /*
          * -------------------------------------------------
-         * BOSS CHASE
+         * ENTER COMBAT RANGE
          * -------------------------------------------------
+         *
+         * Do not yield from CHASE when the boss gets close.
+         * That caused a short CHASE -> yield -> CHASE loop
+         * around the player.
+         *
+         * Instead, hand control to ATTACK and let the attack
+         * state manage close-range spacing.
          */
-        case BOSS_STATE_CHASE:
+        if (distance <=
+                BOSS_ATTACK_RANGE &&
+            Collision_HasLineOfSight(
+                boss->x,
+                boss->y,
+                player->x,
+                player->y))
         {
-            /*
-             * SPECIAL ATTACK
-             */
-            if (boss->boss_phase !=
-                    BOSS_PHASE_ONE &&
-                Boss_CanUseSpecial(boss) &&
-                distance <=
-                    BOSS_SPECIAL_RANGE &&
-                Collision_HasLineOfSight(
-                    boss->x,
-                    boss->y,
-                    player->x,
-                    player->y))
-            {
-                boss->boss_state =
-                    BOSS_STATE_SPECIAL;
+            boss->state =
+                ENEMY_STATE_ATTACK;
 
-                boss->state =
-                    ENEMY_STATE_ATTACK;
+            boss->boss_state =
+                BOSS_STATE_ATTACK;
 
-                Boss_PerformSpecial(
+            break;
+        }
+
+        Boss_MoveTowardPlayer(
+            index,
+            boss,
+            player);
+
+        break;
+    }
+
+    /*
+     * -------------------------------------------------
+     * BOSS ATTACK
+     * -------------------------------------------------
+     */
+    case BOSS_STATE_ATTACK:
+    {
+        /*
+         * Special attack first.
+         */
+        if (Boss_CanUseSpecial(boss) &&
+            boss->boss_phase !=
+                BOSS_PHASE_ONE &&
+            distance <=
+                BOSS_SPECIAL_RANGE &&
+            Collision_HasLineOfSight(
+                boss->x,
+                boss->y,
+                player->x,
+                player->y))
+        {
+            boss->boss_state =
+                BOSS_STATE_SPECIAL;
+
+            Boss_PerformSpecial(
+                boss,
+                player);
+
+            break;
+        }
+
+        /*
+         * -------------------------------------------------
+         * CLOSE-RANGE SPACING
+         * -------------------------------------------------
+         *
+         * ATTACK is a combat state, not a fixed position.
+         * If the boss gets physically too close, move it a
+         * small amount away from the player while remaining
+         * in ATTACK.
+         *
+         * Crucially, this does NOT switch back to CHASE.
+         * That gives the boss hysteresis and prevents the
+         * visible CHASE <-> ATTACK vibration at the boundary.
+         */
+        if (distance <=
+                BOSS_CONTACT_DISTANCE &&
+            Collision_HasLineOfSight(
+                boss->x,
+                boss->y,
+                player->x,
+                player->y))
+        {
+            if (Boss_TryYield(
+                    index,
                     boss,
-                    player
-                );
-
-                break;
-            }
-
-            /*
-             * -------------------------------------------------
-             * ENTER COMBAT RANGE
-             * -------------------------------------------------
-             *
-             * Do not yield from CHASE when the boss gets close.
-             * That caused a short CHASE -> yield -> CHASE loop
-             * around the player.
-             *
-             * Instead, hand control to ATTACK and let the attack
-             * state manage close-range spacing.
-             */
-            if (distance <=
-                    BOSS_ATTACK_RANGE &&
-                Collision_HasLineOfSight(
-                    boss->x,
-                    boss->y,
-                    player->x,
-                    player->y))
+                    player))
             {
                 boss->state =
                     ENEMY_STATE_ATTACK;
@@ -2517,156 +2506,142 @@ static void BossFSM_Update(
                 boss->boss_state =
                     BOSS_STATE_ATTACK;
 
-                break;
-            }
+                boss->boss_state_timer =
+                    0.0f;
 
-            Boss_MoveTowardPlayer(
-                index,
-                boss,
-                player
-            );
+                return;
+            }
+        }
+
+        /*
+         * Normal attack.
+         */
+        if (distance <=
+                BOSS_ATTACK_RANGE &&
+            Collision_HasLineOfSight(
+                boss->x,
+                boss->y,
+                player->x,
+                player->y))
+        {
+            if (boss->attack_timer <=
+                0.0f)
+            {
+                Player_TakeDamage(
+                    BOSS_ATTACK_DAMAGE);
+
+                Audio_PlayBossAttack();
+
+                if (boss->boss_phase ==
+                    BOSS_PHASE_THREE)
+                {
+                    boss->attack_timer =
+                        boss->attack_cooldown *
+                        0.55f;
+                }
+                else if (boss->boss_phase ==
+                         BOSS_PHASE_TWO)
+                {
+                    boss->attack_timer =
+                        boss->attack_cooldown *
+                        0.75f;
+                }
+                else
+                {
+                    boss->attack_timer =
+                        boss->attack_cooldown;
+                }
+            }
 
             break;
         }
 
         /*
-         * -------------------------------------------------
-         * BOSS ATTACK
-         * -------------------------------------------------
+         * Player moved outside the ATTACK exit range.
+         *
+         * ATTACK uses a wider exit threshold than its entry
+         * threshold. This hysteresis prevents rapid state
+         * switching when the distance hovers around 60 px.
          */
-        case BOSS_STATE_ATTACK:
+        if (distance <=
+            BOSS_ATTACK_EXIT_RANGE)
         {
-            /*
-             * Special attack first.
-             */
-            if (Boss_CanUseSpecial(boss) &&
-                boss->boss_phase !=
-                    BOSS_PHASE_ONE &&
-                distance <=
-                    BOSS_SPECIAL_RANGE &&
-                Collision_HasLineOfSight(
-                    boss->x,
-                    boss->y,
-                    player->x,
-                    player->y))
+            break;
+        }
+
+        /*
+         * Player moved far enough away to resume navigation.
+         */
+        boss->state =
+            ENEMY_STATE_CHASE;
+
+        boss->boss_state =
+            BOSS_STATE_CHASE;
+
+        boss->path_valid =
+            false;
+
+        boss->path_timer =
+            0.0f;
+
+        stuck_timers[index] =
+            0.0f;
+
+        boss->boss_state_timer =
+            0.0f;
+
+        chase_modes[index] =
+            ENEMY_CHASE_DIRECT;
+
+        break;
+    }
+
+    /*
+     * -------------------------------------------------
+     * BOSS SPECIAL
+     * -------------------------------------------------
+     */
+    case BOSS_STATE_SPECIAL:
+    {
+        Boss_PerformSpecial(
+            boss,
+            player);
+
+        break;
+    }
+
+    /*
+     * -------------------------------------------------
+     * BOSS RECOVER
+     * -------------------------------------------------
+     */
+    case BOSS_STATE_RECOVER:
+    {
+        if (boss->boss_recovery_timer <=
+            0.0f)
+        {
+            if (boss->boss_phase ==
+                BOSS_PHASE_THREE)
             {
                 boss->boss_state =
-                    BOSS_STATE_SPECIAL;
-
-                Boss_PerformSpecial(
-                    boss,
-                    player
-                );
-
-                break;
+                    BOSS_STATE_ENRAGED;
             }
-
-            /*
-             * -------------------------------------------------
-             * CLOSE-RANGE SPACING
-             * -------------------------------------------------
-             *
-             * ATTACK is a combat state, not a fixed position.
-             * If the boss gets physically too close, move it a
-             * small amount away from the player while remaining
-             * in ATTACK.
-             *
-             * Crucially, this does NOT switch back to CHASE.
-             * That gives the boss hysteresis and prevents the
-             * visible CHASE <-> ATTACK vibration at the boundary.
-             */
-            if (distance <=
-                    BOSS_CONTACT_DISTANCE &&
-                Collision_HasLineOfSight(
-                    boss->x,
-                    boss->y,
-                    player->x,
-                    player->y))
+            else
             {
-                if (Boss_TryYield(
-                        index,
-                        boss,
-                        player))
-                {
-                    boss->state =
-                        ENEMY_STATE_ATTACK;
-
-                    boss->boss_state =
-                        BOSS_STATE_ATTACK;
-
-                    boss->boss_state_timer =
-                        0.0f;
-
-                    return;
-                }
+                boss->boss_state =
+                    BOSS_STATE_CHASE;
             }
 
-            /*
-             * Normal attack.
-             */
-            if (distance <=
-                    BOSS_ATTACK_RANGE &&
-                Collision_HasLineOfSight(
-                    boss->x,
-                    boss->y,
-                    player->x,
-                    player->y))
-            {
-                if (boss->attack_timer <=
-                    0.0f)
-                {
-                    Player_TakeDamage(
-                        BOSS_ATTACK_DAMAGE
-                    );
-
-                    Audio_PlayBossAttack();
-
-                    if (boss->boss_phase ==
-                        BOSS_PHASE_THREE)
-                    {
-                        boss->attack_timer =
-                            boss->attack_cooldown *
-                            0.55f;
-                    }
-                    else if (boss->boss_phase ==
-                             BOSS_PHASE_TWO)
-                    {
-                        boss->attack_timer =
-                            boss->attack_cooldown *
-                            0.75f;
-                    }
-                    else
-                    {
-                        boss->attack_timer =
-                            boss->attack_cooldown;
-                    }
-                }
-
-                break;
-            }
-
-            /*
-             * Player moved outside the ATTACK exit range.
-             *
-             * ATTACK uses a wider exit threshold than its entry
-             * threshold. This hysteresis prevents rapid state
-             * switching when the distance hovers around 60 px.
-             */
-            if (distance <=
-                BOSS_ATTACK_EXIT_RANGE)
-            {
-                break;
-            }
-
-            /*
-             * Player moved far enough away to resume navigation.
-             */
             boss->state =
                 ENEMY_STATE_CHASE;
 
-            boss->boss_state =
-                BOSS_STATE_CHASE;
-
+            /*
+             * CRITICAL:
+             *
+             * The boss must receive a completely
+             * fresh navigation decision after
+             * recovering from a special attack.
+             */
             boss->path_valid =
                 false;
 
@@ -2679,152 +2654,83 @@ static void BossFSM_Update(
             boss->boss_state_timer =
                 0.0f;
 
+            boss_previous_target_distance[index] =
+                0.0f;
+
             chase_modes[index] =
                 ENEMY_CHASE_DIRECT;
-
-            break;
         }
 
+        break;
+    }
+
+    /*
+     * -------------------------------------------------
+     * BOSS ENRAGED
+     * -------------------------------------------------
+     */
+    case BOSS_STATE_ENRAGED:
+    {
         /*
-         * -------------------------------------------------
-         * BOSS SPECIAL
-         * -------------------------------------------------
+         * Phase 3 special.
          */
-        case BOSS_STATE_SPECIAL:
+        if (Boss_CanUseSpecial(boss) &&
+            distance <=
+                BOSS_SPECIAL_RANGE &&
+            Collision_HasLineOfSight(
+                boss->x,
+                boss->y,
+                player->x,
+                player->y))
         {
-            Boss_PerformSpecial(
-                boss,
-                player
-            );
-
-            break;
-        }
-
-        /*
-         * -------------------------------------------------
-         * BOSS RECOVER
-         * -------------------------------------------------
-         */
-        case BOSS_STATE_RECOVER:
-        {
-            if (boss->boss_recovery_timer <=
-                0.0f)
-            {
-                if (boss->boss_phase ==
-                    BOSS_PHASE_THREE)
-                {
-                    boss->boss_state =
-                        BOSS_STATE_ENRAGED;
-                }
-                else
-                {
-                    boss->boss_state =
-                        BOSS_STATE_CHASE;
-                }
-
-                boss->state =
-                    ENEMY_STATE_CHASE;
-
-                /*
-                 * CRITICAL:
-                 *
-                 * The boss must receive a completely
-                 * fresh navigation decision after
-                 * recovering from a special attack.
-                 */
-                boss->path_valid =
-                    false;
-
-                boss->path_timer =
-                    0.0f;
-
-                stuck_timers[index] =
-                    0.0f;
-
-                boss->boss_state_timer =
-                    0.0f;
-
-                boss_previous_target_distance[index] =
-                    0.0f;
-
-                chase_modes[index] =
-                    ENEMY_CHASE_DIRECT;
-            }
-
-            break;
-        }
-
-        /*
-         * -------------------------------------------------
-         * BOSS ENRAGED
-         * -------------------------------------------------
-         */
-        case BOSS_STATE_ENRAGED:
-        {
-            /*
-             * Phase 3 special.
-             */
-            if (Boss_CanUseSpecial(boss) &&
-                distance <=
-                    BOSS_SPECIAL_RANGE &&
-                Collision_HasLineOfSight(
-                    boss->x,
-                    boss->y,
-                    player->x,
-                    player->y))
-            {
-                boss->boss_state =
-                    BOSS_STATE_SPECIAL;
-
-                boss->state =
-                    ENEMY_STATE_ATTACK;
-
-                Boss_PerformSpecial(
-                    boss,
-                    player
-                );
-
-                break;
-            }
-
-            boss->speed =
-                BOSS_ENRAGED_SPEED;
-
-            if (distance <=
-                    BOSS_ATTACK_RANGE &&
-                Collision_HasLineOfSight(
-                    boss->x,
-                    boss->y,
-                    player->x,
-                    player->y))
-            {
-                boss->state =
-                    ENEMY_STATE_ATTACK;
-
-                boss->boss_state =
-                    BOSS_STATE_ATTACK;
-
-                break;
-            }
+            boss->boss_state =
+                BOSS_STATE_SPECIAL;
 
             boss->state =
-                ENEMY_STATE_CHASE;
+                ENEMY_STATE_ATTACK;
 
-            Boss_MoveTowardPlayer(
-                index,
+            Boss_PerformSpecial(
                 boss,
-                player
-            );
+                player);
 
             break;
         }
+
+        boss->speed =
+            BOSS_ENRAGED_SPEED;
+
+        if (distance <=
+                BOSS_ATTACK_RANGE &&
+            Collision_HasLineOfSight(
+                boss->x,
+                boss->y,
+                player->x,
+                player->y))
+        {
+            boss->state =
+                ENEMY_STATE_ATTACK;
+
+            boss->boss_state =
+                BOSS_STATE_ATTACK;
+
+            break;
+        }
+
+        boss->state =
+            ENEMY_STATE_CHASE;
+
+        Boss_MoveTowardPlayer(
+            index,
+            boss,
+            player);
+
+        break;
+    }
     }
 }
 
-
 void EnemyFSM_Update(
-    int index
-)
+    int index)
 {
     Enemy *enemy =
         Enemy_Get(index);
@@ -2848,8 +2754,7 @@ void EnemyFSM_Update(
         BossFSM_Update(
             index,
             enemy,
-            player
-        );
+            player);
 
         return;
     }
@@ -2859,8 +2764,7 @@ void EnemyFSM_Update(
             enemy->x,
             enemy->y,
             player->x,
-            player->y
-        );
+            player->y);
 
     float dt =
         GetFrameTime();
@@ -2978,20 +2882,87 @@ void EnemyFSM_Update(
 
     switch (enemy->state)
     {
-        /*
-         * -------------------------------------------------
-         * IDLE
-         * -------------------------------------------------
-         */
-        case ENEMY_STATE_IDLE:
+    /*
+     * -------------------------------------------------
+     * IDLE
+     * -------------------------------------------------
+     */
+    case ENEMY_STATE_IDLE:
+    {
+        if (distance <=
+                ENEMY_DETECTION_RANGE &&
+            Collision_HasLineOfSight(
+                enemy->x,
+                enemy->y,
+                player->x,
+                player->y))
         {
-            if (distance <=
-                    ENEMY_DETECTION_RANGE &&
-                Collision_HasLineOfSight(
-                    enemy->x,
-                    enemy->y,
-                    player->x,
-                    player->y))
+            enemy->target_x =
+                player->x;
+
+            enemy->target_y =
+                player->y;
+
+            enemy->awareness_timer =
+                ENEMY_AWARENESS_TIME;
+
+            enemy->path_valid =
+                false;
+
+            enemy->path_timer =
+                0.0f;
+
+            stuck_timers[index] =
+                0.0f;
+
+            chase_modes[index] =
+                ENEMY_CHASE_DIRECT;
+
+            enemy->state =
+                ENEMY_STATE_CHASE;
+        }
+
+        break;
+    }
+
+    /*
+     * -------------------------------------------------
+     * CHASE
+     * -------------------------------------------------
+     */
+    case ENEMY_STATE_CHASE:
+    {
+        if (distance <=
+                ENEMY_ATTACK_RANGE &&
+            Collision_HasLineOfSight(
+                enemy->x,
+                enemy->y,
+                player->x,
+                player->y))
+        {
+            enemy->state =
+                ENEMY_STATE_ATTACK;
+
+            stuck_timers[index] =
+                0.0f;
+
+            break;
+        }
+
+        bool has_line_of_sight =
+            Collision_HasLineOfSight(
+                enemy->x,
+                enemy->y,
+                player->x,
+                player->y);
+
+        /*
+         * DIRECT CHASE
+         */
+        if (chase_modes[index] ==
+            ENEMY_CHASE_DIRECT)
+        {
+            if (has_line_of_sight)
             {
                 enemy->target_x =
                     player->x;
@@ -3002,331 +2973,251 @@ void EnemyFSM_Update(
                 enemy->awareness_timer =
                     ENEMY_AWARENESS_TIME;
 
-                enemy->path_valid =
-                    false;
+                float movement_target_x =
+                    player->x;
 
-                enemy->path_timer =
-                    0.0f;
+                float movement_target_y =
+                    player->y;
 
-                stuck_timers[index] =
-                    0.0f;
+                Enemy_GetAdaptiveTarget(
+                    enemy,
+                    player,
+                    &movement_target_x,
+                    &movement_target_y);
 
-                chase_modes[index] =
-                    ENEMY_CHASE_DIRECT;
-
-                enemy->state =
-                    ENEMY_STATE_CHASE;
-            }
-
-            break;
-        }
-
-        /*
-         * -------------------------------------------------
-         * CHASE
-         * -------------------------------------------------
-         */
-        case ENEMY_STATE_CHASE:
-        {
-            if (distance <=
-                    ENEMY_ATTACK_RANGE &&
-                Collision_HasLineOfSight(
-                    enemy->x,
-                    enemy->y,
-                    player->x,
-                    player->y))
-            {
-                enemy->state =
-                    ENEMY_STATE_ATTACK;
-
-                stuck_timers[index] =
-                    0.0f;
-
-                break;
-            }
-
-            bool has_line_of_sight =
-                Collision_HasLineOfSight(
-                    enemy->x,
-                    enemy->y,
-                    player->x,
-                    player->y
-                );
-
-            /*
-             * DIRECT CHASE
-             */
-            if (chase_modes[index] ==
-                ENEMY_CHASE_DIRECT)
-            {
-                if (has_line_of_sight)
-                {
-                    enemy->target_x =
-                        player->x;
-
-                    enemy->target_y =
-                        player->y;
-
-                    enemy->awareness_timer =
-                        ENEMY_AWARENESS_TIME;
-
-                    float movement_target_x =
-                        player->x;
-
-                    float movement_target_y =
-                        player->y;
-
-                    Enemy_GetAdaptiveTarget(
-                        enemy,
-                        player,
-                        &movement_target_x,
-                        &movement_target_y
-                    );
-
-                    bool moved =
-                        Enemy_MoveToward(
-                            index,
-                            enemy,
-                            movement_target_x,
-                            movement_target_y
-                        );
-
-                    Enemy_UpdateStuckTimer(
+                bool moved =
+                    Enemy_MoveToward(
                         index,
-                        moved
-                    );
+                        enemy,
+                        movement_target_x,
+                        movement_target_y);
 
-                    if (Enemy_IsStuck(index))
-                    {
-                        chase_modes[index] =
-                            ENEMY_CHASE_PATH;
+                Enemy_UpdateStuckTimer(
+                    index,
+                    moved);
 
-                        enemy->path_valid =
-                            false;
-
-                        enemy->path_timer =
-                            0.0f;
-
-                        stuck_timers[index] =
-                            0.0f;
-                    }
-
-                    break;
-                }
-
-                chase_modes[index] =
-                    ENEMY_CHASE_PATH;
-
-                enemy->path_valid =
-                    false;
-
-                enemy->path_timer =
-                    0.0f;
-
-                stuck_timers[index] =
-                    0.0f;
-            }
-
-            /*
-             * PATH CHASE
-             */
-            if (chase_modes[index] ==
-                ENEMY_CHASE_PATH)
-            {
-                if (has_line_of_sight)
+                if (Enemy_IsStuck(index))
                 {
-                    enemy->target_x =
-                        player->x;
+                    chase_modes[index] =
+                        ENEMY_CHASE_PATH;
 
-                    enemy->target_y =
-                        player->y;
-
-                    enemy->awareness_timer =
-                        ENEMY_AWARENESS_TIME;
-                }
-
-                if (enemy->awareness_timer <=
-                        0.0f &&
-                    distance >=
-                        ENEMY_LOSE_RANGE)
-                {
                     enemy->path_valid =
                         false;
 
-                    enemy->state =
-                        ENEMY_STATE_IDLE;
-
-                    Enemy_ResetNavigation(
-                        index,
-                        enemy
-                    );
-
-                    break;
-                }
-
-                if (enemy->path_timer <=
-                        0.0f ||
-                    !enemy->path_valid)
-                {
-                    float path_target_x =
-                        enemy->target_x;
-
-                    float path_target_y =
-                        enemy->target_y;
-
-                    Enemy_GetAdaptiveTarget(
-                        enemy,
-                        player,
-                        &path_target_x,
-                        &path_target_y
-                    );
-
-                    Enemy_UpdatePath(
-                        enemy,
-                        path_target_x,
-                        path_target_y
-                    );
-
                     enemy->path_timer =
-                        ENEMY_PATH_UPDATE_TIME;
+                        0.0f;
 
                     stuck_timers[index] =
                         0.0f;
                 }
 
-                if (enemy->path_valid)
-                {
-                    bool moved =
-                        Enemy_MoveToward(
-                            index,
-                            enemy,
-                            enemy->waypoint_x,
-                            enemy->waypoint_y
-                        );
-
-                    Enemy_UpdateStuckTimer(
-                        index,
-                        moved
-                    );
-
-                    float waypoint_distance =
-                        DistanceBetween(
-                            enemy->x,
-                            enemy->y,
-                            enemy->waypoint_x,
-                            enemy->waypoint_y
-                        );
-
-                    if (waypoint_distance <
-                        7.0f)
-                    {
-                        enemy->path_timer =
-                            0.0f;
-
-                        stuck_timers[index] =
-                            0.0f;
-                    }
-
-                    if (Enemy_IsStuck(index))
-                    {
-                        enemy->path_valid =
-                            false;
-
-                        enemy->path_timer =
-                            0.0f;
-
-                        stuck_timers[index] =
-                            0.0f;
-                    }
-                }
+                break;
             }
 
-            break;
+            chase_modes[index] =
+                ENEMY_CHASE_PATH;
+
+            enemy->path_valid =
+                false;
+
+            enemy->path_timer =
+                0.0f;
+
+            stuck_timers[index] =
+                0.0f;
         }
 
         /*
-         * -------------------------------------------------
-         * ATTACK
-         * -------------------------------------------------
+         * PATH CHASE
          */
-        case ENEMY_STATE_ATTACK:
+        if (chase_modes[index] ==
+            ENEMY_CHASE_PATH)
         {
-            if (distance >
-                    ENEMY_ATTACK_RANGE ||
-                !Collision_HasLineOfSight(
-                    enemy->x,
-                    enemy->y,
-                    player->x,
-                    player->y))
+            if (has_line_of_sight)
             {
-                enemy->state =
-                    ENEMY_STATE_CHASE;
+                enemy->target_x =
+                    player->x;
 
+                enemy->target_y =
+                    player->y;
+
+                enemy->awareness_timer =
+                    ENEMY_AWARENESS_TIME;
+            }
+
+            if (enemy->awareness_timer <=
+                    0.0f &&
+                distance >=
+                    ENEMY_LOSE_RANGE)
+            {
                 enemy->path_valid =
                     false;
 
-                enemy->path_timer =
-                    0.0f;
+                enemy->state =
+                    ENEMY_STATE_IDLE;
 
-                stuck_timers[index] =
-                    0.0f;
-
-                chase_modes[index] =
-                    ENEMY_CHASE_DIRECT;
+                Enemy_ResetNavigation(
+                    index,
+                    enemy);
 
                 break;
             }
 
-            if (enemy->attack_timer <=
-                0.0f)
+            if (enemy->path_timer <=
+                    0.0f ||
+                !enemy->path_valid)
             {
-                if (Enemy_ShouldAdaptAttack(
-                        enemy))
+                float path_target_x =
+                    enemy->target_x;
+
+                float path_target_y =
+                    enemy->target_y;
+
+                Enemy_GetAdaptiveTarget(
+                    enemy,
+                    player,
+                    &path_target_x,
+                    &path_target_y);
+
+                Enemy_UpdatePath(
+                    enemy,
+                    path_target_x,
+                    path_target_y);
+
+                enemy->path_timer =
+                    ENEMY_PATH_UPDATE_TIME;
+
+                stuck_timers[index] =
+                    0.0f;
+            }
+
+            if (enemy->path_valid)
+            {
+                bool moved =
+                    Enemy_MoveToward(
+                        index,
+                        enemy,
+                        enemy->waypoint_x,
+                        enemy->waypoint_y);
+
+                Enemy_UpdateStuckTimer(
+                    index,
+                    moved);
+
+                float waypoint_distance =
+                    DistanceBetween(
+                        enemy->x,
+                        enemy->y,
+                        enemy->waypoint_x,
+                        enemy->waypoint_y);
+
+                if (waypoint_distance <
+                    7.0f)
                 {
-                    if (enemy->adaptive_decision ==
-                        ADAPTIVE_DECISION_ATTACK_AGGRESSIVE)
-                    {
-                        Player_TakeDamage(
-                            ENEMY_ATTACK_DAMAGE
-                        );
+                    enemy->path_timer =
+                        0.0f;
 
-                        enemy->attack_timer =
-                            enemy->attack_cooldown *
-                            0.70f;
-                    }
-                    else
-                    {
-                        Player_TakeDamage(
-                            ENEMY_ATTACK_DAMAGE
-                        );
+                    stuck_timers[index] =
+                        0.0f;
+                }
 
-                        enemy->attack_timer =
-                            enemy->attack_cooldown *
-                            1.25f;
-                    }
+                if (Enemy_IsStuck(index))
+                {
+                    enemy->path_valid =
+                        false;
+
+                    enemy->path_timer =
+                        0.0f;
+
+                    stuck_timers[index] =
+                        0.0f;
+                }
+            }
+        }
+
+        break;
+    }
+
+    /*
+     * -------------------------------------------------
+     * ATTACK
+     * -------------------------------------------------
+     */
+    case ENEMY_STATE_ATTACK:
+    {
+        if (distance >
+                ENEMY_ATTACK_RANGE ||
+            !Collision_HasLineOfSight(
+                enemy->x,
+                enemy->y,
+                player->x,
+                player->y))
+        {
+            enemy->state =
+                ENEMY_STATE_CHASE;
+
+            enemy->path_valid =
+                false;
+
+            enemy->path_timer =
+                0.0f;
+
+            stuck_timers[index] =
+                0.0f;
+
+            chase_modes[index] =
+                ENEMY_CHASE_DIRECT;
+
+            break;
+        }
+
+        if (enemy->attack_timer <=
+            0.0f)
+        {
+            if (Enemy_ShouldAdaptAttack(
+                    enemy))
+            {
+                if (enemy->adaptive_decision ==
+                    ADAPTIVE_DECISION_ATTACK_AGGRESSIVE)
+                {
+                    Player_TakeDamage(
+                        ENEMY_ATTACK_DAMAGE);
+
+                    enemy->attack_timer =
+                        enemy->attack_cooldown *
+                        0.70f;
                 }
                 else
                 {
                     Player_TakeDamage(
-                        ENEMY_ATTACK_DAMAGE
-                    );
+                        ENEMY_ATTACK_DAMAGE);
 
                     enemy->attack_timer =
-                        enemy->attack_cooldown;
+                        enemy->attack_cooldown *
+                        1.25f;
                 }
             }
+            else
+            {
+                Player_TakeDamage(
+                    ENEMY_ATTACK_DAMAGE);
 
-            break;
+                enemy->attack_timer =
+                    enemy->attack_cooldown;
+            }
         }
 
-        case ENEMY_STATE_HURT:
-        {
-            break;
-        }
+        break;
+    }
 
-        case ENEMY_STATE_DEAD:
-        {
-            break;
-        }
+    case ENEMY_STATE_HURT:
+    {
+        break;
+    }
+
+    case ENEMY_STATE_DEAD:
+    {
+        break;
+    }
     }
 }
