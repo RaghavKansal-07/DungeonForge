@@ -5,9 +5,11 @@
 #include "pathfinding.h"
 #include "raylib.h"
 #include "audio.h"
+#include "effects.h"
 
 #include <math.h>
 #include <stdbool.h>
+#include <stddef.h>
 
 #define ENEMY_DETECTION_RANGE 250.0f
 #define ENEMY_LOSE_RANGE 350.0f
@@ -890,6 +892,8 @@ static void Boss_UpdatePhase(
             new_phase;
 
         Audio_PlayBossPhase();
+
+        Effects_AddShake(8.0f);
 
         boss->boss_state_timer =
             0.0f;
@@ -2710,6 +2714,29 @@ static void BossFSM_Update(
         break;
     }
     }
+}
+
+bool EnemyFSM_GetAdaptiveCue(
+    Enemy *enemy,
+    float *target_x,
+    float *target_y)
+{
+    Player *player =
+        Player_Get();
+
+    if (enemy == NULL ||
+        player == NULL ||
+        target_x == NULL ||
+        target_y == NULL)
+    {
+        return false;
+    }
+
+    return Enemy_GetAdaptiveTarget(
+        enemy,
+        player,
+        target_x,
+        target_y);
 }
 
 void EnemyFSM_Reset(void)

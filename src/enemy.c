@@ -7,6 +7,8 @@
 #include "item_drop.h"
 #include "raylib.h"
 #include "audio.h"
+#include "ui.h"
+#include "effects.h"
 
 #include <math.h>
 #include <stddef.h>
@@ -19,7 +21,7 @@ static Enemy enemies[MAX_ENEMIES];
 #define ENEMY_SPAWN_PLAYER_SAFE_DISTANCE 320.0f
 #define ENEMY_SPAWN_PLAYER_MIN_DISTANCE 160.0f
 
-static bool debug_enabled = true;
+static bool debug_enabled = false;
 
 /*
  * ---------------------------------------------------------
@@ -1691,6 +1693,248 @@ static void Enemy_RenderDeathEffects(void)
 
 /*
  * ---------------------------------------------------------
+ * Adaptive AI Cues
+ * ---------------------------------------------------------
+ *
+ * Draws what an enemy has decided to do, so the adaptive
+ * AI can be seen without any debug text.
+ */
+
+static void Enemy_DrawDashedLine(
+    float x1,
+    float y1,
+    float x2,
+    float y2,
+    Color color)
+{
+    float dx = x2 - x1;
+    float dy = y2 - y1;
+
+    float length =
+        sqrtf(dx * dx + dy * dy);
+
+    if (length < 1.0f)
+        return;
+
+    dx /= length;
+    dy /= length;
+
+    const float dash = 8.0f;
+    const float gap = 6.0f;
+    const float period = dash + gap;
+
+    /* Dashes slowly travel toward the target. */
+    float offset =
+        fmodf((float)GetTime() * 40.0f, period);
+
+    for (float d = offset - period;
+         d < length;
+         d += period)
+    {
+        float start = d < 0.0f ? 0.0f : d;
+        float end = d + dash;
+
+        if (end > length)
+            end = length;
+
+        if (end <= start)
+            continue;
+
+        DrawLineEx(
+            (Vector2){x1 + dx * start, y1 + dy * start},
+            (Vector2){x1 + dx * end, y1 + dy * end},
+            2.0f,
+            color);
+    }
+}
+
+static void Enemy_RenderShield(
+    const Enemy *enemy,
+    float pulse)
+{
+    Color shield = (Color){90, 200, 255, 255};
+
+    Vector2 center = {enemy->x, enemy->y};
+
+    float inner = enemy->radius + 6.0f;
+    float outer = inner + 3.0f;
+
+    DrawCircle(
+        (int)enemy->x,
+        (int)enemy->y,
+        outer + 2.0f,
+        Fade(shield, 0.07f + pulse * 0.05f));
+
+    DrawRing(
+        center, inner, outer,
+        0.0f, 360.0f, 36,
+        Fade(shield, 0.35f));
+
+    float spin = (float)GetTime() * 90.0f;
+
+    for (int i = 0; i < 3; i++)
+    {
+        float start = spin + (float)i * 120.0f;
+
+        DrawRing(
+            center, inner - 1.0f, outer + 1.0f,
+            start, start + 55.0f, 12,
+            Fade(WHITE, 0.85f));
+    }
+}
+
+static void Enemy_RenderAggression(
+    const Enemy *enemy,
+    float pulse)
+{
+    Color rage = (Color){255, 85, 60, 255};
+
+    float spin = (float)GetTime() * 2.0f;
+
+    for (int i = 0; i < 8; i++)
+    {
+        float angle =
+            spin + (float)i * (PI / 4.0f);
+
+        float inner =
+            enemy->radius + 6.0f + pulse * 2.0f;
+
+        float outer = inner + 7.0f;
+
+        DrawLineEx(
+            (Vector2){
+                enemy->x + cosf(angle) * inner,
+                enemy->y + sinf(angle) * inner},
+            (Vector2){
+                enemy->x + cosf(angle) * outer,
+                enemy->y + sinf(angle) * outer},
+            2.5f,
+            Fade(rage, 0.85f));
+    }
+}
+
+static void Enemy_RenderAdaptiveCue(Enemy *enemy)
+{
+    if (enemy->state == ENEMY_STATE_DEAD)
+        return;
+
+    AdaptiveDecision decision =
+        enemy->adaptive_decision;
+
+    if (decision == ADAPTIVE_DECISION_NONE)
+        return;
+
+    float pulse =
+        (sinf((float)GetTime() * 6.0f) + 1.0f) * 0.5f;
+
+    /* Guardian stances. */
+    if (decision == ADAPTIVE_DECISION_ATTACK_DEFENSIVE)
+    {
+        Enemy_RenderShield(enemy, pulse);
+        return;
+    }
+
+    if (decision == ADAPTIVE_DECISION_ATTACK_AGGRESSIVE)
+    {
+        if (enemy->state != ENEMY_STATE_IDLE)
+            Enemy_RenderAggression(enemy, pulse);
+
+        return;
+    }
+
+    /* Movement decisions matter only while hunting. */
+    if (enemy->state != ENEMY_STATE_CHASE)
+        return;
+
+    float target_x = 0.0f;
+    float target_y = 0.0f;
+
+    if (!EnemyFSM_GetAdaptiveCue(
+            enemy, &target_x, &target_y))
+    {
+        return;
+    }
+
+    Color color;
+
+    switch (decision)
+    {
+    case ADAPTIVE_DECISION_PREDICT_LEFT:
+    case ADAPTIVE_DECISION_PREDICT_RIGHT:
+    case ADAPTIVE_DECISION_PREDICT_UP:
+    case ADAPTIVE_DECISION_PREDICT_DOWN:
+        color = (Color){255, 90, 100, 255};
+        break;
+
+    case ADAPTIVE_DECISION_FLANK_LEFT:
+    case ADAPTIVE_DECISION_FLANK_RIGHT:
+        color = (Color){225, 100, 255, 255};
+        break;
+
+    case ADAPTIVE_DECISION_CLOSE_DISTANCE:
+        color = (Color){255, 200, 60, 255};
+        break;
+
+    default:
+        return;
+    }
+
+    float strength = enemy->adaptation_level;
+
+    if (strength < 0.0f)
+        strength = 0.0f;
+    if (strength > 1.0f)
+        strength = 1.0f;
+
+    float alpha = 0.35f + 0.5f * strength;
+
+    /* Aura around the enemy. */
+    DrawCircleLines(
+        (int)enemy->x,
+        (int)enemy->y,
+        enemy->radius + 5.0f + pulse * 2.0f,
+        Fade(color, alpha));
+
+    /* Line to the point it is steering toward. */
+    Enemy_DrawDashedLine(
+        enemy->x, enemy->y,
+        target_x, target_y,
+        Fade(color, alpha * 0.8f));
+
+    /* Crosshair at that point. */
+    float r = 9.0f + pulse * 3.0f;
+
+    DrawCircleLines(
+        (int)target_x, (int)target_y,
+        r, Fade(color, alpha));
+
+    DrawCircle(
+        (int)target_x, (int)target_y,
+        2.5f, Fade(color, alpha));
+
+    DrawLineEx(
+        (Vector2){target_x - r - 5.0f, target_y},
+        (Vector2){target_x - r + 3.0f, target_y},
+        2.0f, Fade(color, alpha));
+
+    DrawLineEx(
+        (Vector2){target_x + r - 3.0f, target_y},
+        (Vector2){target_x + r + 5.0f, target_y},
+        2.0f, Fade(color, alpha));
+
+    DrawLineEx(
+        (Vector2){target_x, target_y - r - 5.0f},
+        (Vector2){target_x, target_y - r + 3.0f},
+        2.0f, Fade(color, alpha));
+
+    DrawLineEx(
+        (Vector2){target_x, target_y + r - 3.0f},
+        (Vector2){target_x, target_y + r + 5.0f},
+        2.0f, Fade(color, alpha));
+}
+
+/*
+ * ---------------------------------------------------------
  * Enemy Rendering
  * ---------------------------------------------------------
  */
@@ -1730,6 +1974,24 @@ void Enemy_Render(void)
                 enemy,
                 body_color);
         }
+
+        if (enemy->is_boss)
+        {
+            Enemy_RenderBossBody(
+                enemy);
+        }
+        else
+        {
+            Color body_color =
+                Enemy_GetArchetypeColor(
+                    enemy->adaptive_type);
+
+            Enemy_RenderNormalBody(
+                enemy,
+                body_color);
+        }
+
+        Enemy_RenderAdaptiveCue(enemy);
 
         /*
          * -------------------------------------------------
@@ -1827,179 +2089,109 @@ void Enemy_Render(void)
         if (!debug_enabled)
             continue;
 
-        const char *state_text =
-            "UNKNOWN";
+        /*
+         * Compact label: two short lines under the enemy.
+         */
+        const char *state_text = "UNKNOWN";
 
-        switch (enemy->state)
+        if (enemy->is_boss)
         {
-        case ENEMY_STATE_IDLE:
-            state_text = "IDLE";
-            break;
-
-        case ENEMY_STATE_CHASE:
-            state_text = "CHASE";
-            break;
-
-        case ENEMY_STATE_ATTACK:
-            state_text = "ATTACK";
-            break;
-
-        case ENEMY_STATE_HURT:
-            state_text = "HURT";
-            break;
-
-        case ENEMY_STATE_DEAD:
-            state_text = "DEAD";
-            break;
+            switch (enemy->boss_state)
+            {
+            case BOSS_STATE_IDLE:
+                state_text = "IDLE";
+                break;
+            case BOSS_STATE_CHASE:
+                state_text = "CHASE";
+                break;
+            case BOSS_STATE_ATTACK:
+                state_text = "ATTACK";
+                break;
+            case BOSS_STATE_SPECIAL:
+                state_text = "SPECIAL";
+                break;
+            case BOSS_STATE_RECOVER:
+                state_text = "RECOVER";
+                break;
+            case BOSS_STATE_ENRAGED:
+                state_text = "ENRAGED";
+                break;
+            }
+        }
+        else
+        {
+            switch (enemy->state)
+            {
+            case ENEMY_STATE_IDLE:
+                state_text = "IDLE";
+                break;
+            case ENEMY_STATE_CHASE:
+                state_text = "CHASE";
+                break;
+            case ENEMY_STATE_ATTACK:
+                state_text = "ATTACK";
+                break;
+            case ENEMY_STATE_HURT:
+                state_text = "HURT";
+                break;
+            case ENEMY_STATE_DEAD:
+                state_text = "DEAD";
+                break;
+            }
         }
 
-        int label_offset =
-            (i % 4) * 14;
+        const char *line1 =
+            enemy->is_boss
+                ? TextFormat(
+                      "BOSS P%d  %s",
+                      (int)enemy->boss_phase + 1,
+                      state_text)
+                : TextFormat(
+                      "%s  %s",
+                      AdaptiveAI_GetTypeName(
+                          enemy->adaptive_type),
+                      state_text);
 
-        /*
-         * -------------------------------------------------
-         * Normal enemy debug
-         * -------------------------------------------------
-         */
-        if (!enemy->is_boss)
+        bool has_decision =
+            enemy->adaptive_decision !=
+                ADAPTIVE_DECISION_NONE &&
+            enemy->state != ENEMY_STATE_IDLE;
+
+        const char *line2 =
+            has_decision
+                ? TextFormat(
+                      "%s %.0f%%",
+                      AdaptiveAI_GetDecisionName(
+                          enemy->adaptive_decision),
+                      enemy->adaptation_level *
+                          100.0f)
+                : "";
+
+        int label_y =
+            (int)(enemy->y + enemy->radius) + 10;
+
+        int width1 =
+            UI_TextWidth(line1, 11);
+
+        UI_TextShadow(
+            line1,
+            (int)enemy->x - width1 / 2,
+            label_y,
+            11,
+            enemy->is_boss ? GOLD : WHITE);
+
+        if (has_decision)
         {
-            DrawText(
-                TextFormat(
-                    "#%d %s",
-                    i,
-                    state_text),
-                (int)enemy->x - 30,
-                (int)enemy->y +
-                    25 +
-                    label_offset,
-                12,
-                WHITE);
+            int width2 =
+                UI_TextWidth(line2, 10);
 
-            DrawText(
-                TextFormat(
-                    "%s",
-                    AdaptiveAI_GetTypeName(
-                        enemy->adaptive_type)),
-                (int)enemy->x - 30,
-                (int)enemy->y +
-                    40 +
-                    label_offset,
-                10,
-                YELLOW);
-
-            DrawText(
-                TextFormat(
-                    "%s %.0f%%",
-                    AdaptiveAI_GetDecisionName(
-                        enemy->adaptive_decision),
-                    enemy->adaptation_level *
-                        100.0f),
-                (int)enemy->x - 30,
-                (int)enemy->y +
-                    52 +
-                    label_offset,
+            UI_TextShadow(
+                line2,
+                (int)enemy->x - width2 / 2,
+                label_y + 14,
                 10,
                 ORANGE);
-
-            continue;
         }
-
-        /*
-         * -------------------------------------------------
-         * Boss debug information
-         * -------------------------------------------------
-         */
-
-        const char *boss_state_text =
-            "UNKNOWN";
-
-        switch (enemy->boss_state)
-        {
-        case BOSS_STATE_IDLE:
-            boss_state_text = "IDLE";
-            break;
-
-        case BOSS_STATE_CHASE:
-            boss_state_text = "CHASE";
-            break;
-
-        case BOSS_STATE_ATTACK:
-            boss_state_text = "ATTACK";
-            break;
-
-        case BOSS_STATE_SPECIAL:
-            boss_state_text = "SPECIAL";
-            break;
-
-        case BOSS_STATE_RECOVER:
-            boss_state_text = "RECOVER";
-            break;
-
-        case BOSS_STATE_ENRAGED:
-            boss_state_text = "ENRAGED";
-            break;
-        }
-
-        const char *boss_phase_text =
-            "UNKNOWN";
-
-        switch (enemy->boss_phase)
-        {
-        case BOSS_PHASE_ONE:
-            boss_phase_text = "PHASE 1";
-            break;
-
-        case BOSS_PHASE_TWO:
-            boss_phase_text = "PHASE 2";
-            break;
-
-        case BOSS_PHASE_THREE:
-            boss_phase_text = "PHASE 3";
-            break;
-        }
-
-        int boss_label_x =
-            (int)enemy->x - 45;
-
-        int boss_label_y =
-            (int)enemy->y + 38;
-
-        DrawText(
-            "BOSS",
-            boss_label_x,
-            boss_label_y,
-            14,
-            GOLD);
-
-        DrawText(
-            TextFormat(
-                "%s",
-                boss_state_text),
-            boss_label_x,
-            boss_label_y + 16,
-            11,
-            WHITE);
-
-        DrawText(
-            TextFormat(
-                "%s",
-                boss_phase_text),
-            boss_label_x,
-            boss_label_y + 30,
-            11,
-            SKYBLUE);
-
-        DrawText(
-            TextFormat(
-                "%s %.0f%%",
-                AdaptiveAI_GetDecisionName(
-                    enemy->adaptive_decision),
-                enemy->adaptation_level *
-                    100.0f),
-            boss_label_x,
-            boss_label_y + 44,
-            10,
-            ORANGE);
     }
 
     /*
@@ -2098,6 +2290,20 @@ void Enemy_TakeDamage(
      */
     enemy_hit_effect_timer[index] =
         ENEMY_HIT_EFFECT_DURATION;
+
+    Effects_SpawnNumber(
+        enemy->x,
+        enemy->y - enemy->radius - 34.0f,
+        damage,
+        '\0',
+        enemy->is_boss
+            ? GOLD
+            : WHITE);
+
+    Effects_AddShake(
+        enemy->health <= 0
+            ? 4.0f
+            : 1.5f);
 
     /*
      * Enemy dies.
