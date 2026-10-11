@@ -36,6 +36,12 @@ typedef struct
     int total_attacks;
 
     /*
+     * Attack intensity over the recent past. Each attack
+     * adds 1.0 and the value fades over time.
+     */
+    float recent_attack_score;
+
+    /*
      * -----------------------------------------------------
      * Movement Behavior
      * -----------------------------------------------------
@@ -206,5 +212,18 @@ bool Behavior_HasEnoughData(void);
  */
 bool Behavior_Restore(
     const PlayerBehavior *saved);
+
+/*
+ * Advance time-based statistics (attack score decay).
+ * Call once per gameplay frame.
+ */
+void Behavior_Tick(
+    float dt);
+
+/*
+ * Check a profile without applying it.
+ */
+bool Behavior_IsValid(
+    const PlayerBehavior *profile);
 
 #endif

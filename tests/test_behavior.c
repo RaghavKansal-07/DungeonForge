@@ -5,7 +5,6 @@
 #include "behavior.h"
 #include "events.h"
 
-
 /*
  * ---------------------------------------------------------
  * TEST HELPERS
@@ -15,11 +14,9 @@
 static int tests_run = 0;
 static int tests_passed = 0;
 
-
 static void Test_Assert(
     bool condition,
-    const char *test_name
-)
+    const char *test_name)
 {
     tests_run++;
 
@@ -35,21 +32,17 @@ static void Test_Assert(
     }
 }
 
-
 static bool Float_Equals(
     float a,
-    float b
-)
+    float b)
 {
     const float epsilon = 0.0001f;
 
     return fabsf(a - b) < epsilon;
 }
 
-
 static GameEvent CreateDodgeEvent(
-    DodgeDirection direction
-)
+    DodgeDirection direction)
 {
     GameEvent event = {0};
 
@@ -59,10 +52,8 @@ static GameEvent CreateDodgeEvent(
     return event;
 }
 
-
 static GameEvent CreateMoveEvent(
-    MoveDirection direction
-)
+    MoveDirection direction)
 {
     GameEvent event = {0};
 
@@ -72,10 +63,8 @@ static GameEvent CreateMoveEvent(
     return event;
 }
 
-
 static GameEvent CreateDamageEvent(
-    float damage
-)
+    float damage)
 {
     GameEvent event = {0};
 
@@ -85,10 +74,8 @@ static GameEvent CreateDamageEvent(
     return event;
 }
 
-
 static GameEvent CreateHealEvent(
-    float healing
-)
+    float healing)
 {
     GameEvent event = {0};
 
@@ -97,7 +84,6 @@ static GameEvent CreateHealEvent(
 
     return event;
 }
-
 
 /*
  * ---------------------------------------------------------
@@ -118,41 +104,32 @@ static void Test_EmptyProfile(void)
 
     Test_Assert(
         profile->initialized == true,
-        "Behavior initializes correctly"
-    );
+        "Behavior initializes correctly");
 
     Test_Assert(
         profile->total_movements == 0,
-        "Initial movement count is zero"
-    );
+        "Initial movement count is zero");
 
     Test_Assert(
         profile->total_dodges == 0,
-        "Initial dodge count is zero"
-    );
+        "Initial dodge count is zero");
 
     Test_Assert(
         Float_Equals(
             Behavior_GetDodgeLeftProbability(),
-            0.0f
-        ),
-        "Initial dodge-left probability is zero"
-    );
+            0.0f),
+        "Initial dodge-left probability is zero");
 
     Test_Assert(
         Float_Equals(
             Behavior_GetDodgeRightProbability(),
-            0.0f
-        ),
-        "Initial dodge-right probability is zero"
-    );
+            0.0f),
+        "Initial dodge-right probability is zero");
 
     Test_Assert(
         Behavior_HasEnoughData() == false,
-        "Empty profile does not have enough data"
-    );
+        "Empty profile does not have enough data");
 }
-
 
 /*
  * ---------------------------------------------------------
@@ -177,15 +154,13 @@ static void Test_DodgeProbabilities(void)
     for (int i = 0; i < 8; i++)
     {
         Events_Push(
-            CreateDodgeEvent(DODGE_LEFT)
-        );
+            CreateDodgeEvent(DODGE_LEFT));
     }
 
     for (int i = 0; i < 2; i++)
     {
         Events_Push(
-            CreateDodgeEvent(DODGE_RIGHT)
-        );
+            CreateDodgeEvent(DODGE_RIGHT));
     }
 
     Behavior_Update();
@@ -195,52 +170,40 @@ static void Test_DodgeProbabilities(void)
 
     Test_Assert(
         profile->total_dodges == 10,
-        "Dodge events are counted"
-    );
+        "Dodge events are counted");
 
     Test_Assert(
         profile->dodge_left_count == 8,
-        "Left dodge count is correct"
-    );
+        "Left dodge count is correct");
 
     Test_Assert(
         profile->dodge_right_count == 2,
-        "Right dodge count is correct"
-    );
+        "Right dodge count is correct");
 
     Test_Assert(
         Float_Equals(
             Behavior_GetDodgeLeftProbability(),
-            0.8f
-        ),
-        "Left dodge probability is correct"
-    );
+            0.8f),
+        "Left dodge probability is correct");
 
     Test_Assert(
         Float_Equals(
             Behavior_GetDodgeRightProbability(),
-            0.2f
-        ),
-        "Right dodge probability is correct"
-    );
+            0.2f),
+        "Right dodge probability is correct");
 
     Test_Assert(
         Float_Equals(
             Behavior_GetDodgeUpProbability(),
-            0.0f
-        ),
-        "Up dodge probability is zero"
-    );
+            0.0f),
+        "Up dodge probability is zero");
 
     Test_Assert(
         Float_Equals(
             Behavior_GetDodgeDownProbability(),
-            0.0f
-        ),
-        "Down dodge probability is zero"
-    );
+            0.0f),
+        "Down dodge probability is zero");
 }
-
 
 /*
  * ---------------------------------------------------------
@@ -257,20 +220,16 @@ static void Test_AllDodgeDirections(void)
     for (int i = 0; i < 4; i++)
     {
         Events_Push(
-            CreateDodgeEvent(DODGE_LEFT)
-        );
+            CreateDodgeEvent(DODGE_LEFT));
 
         Events_Push(
-            CreateDodgeEvent(DODGE_RIGHT)
-        );
+            CreateDodgeEvent(DODGE_RIGHT));
 
         Events_Push(
-            CreateDodgeEvent(DODGE_UP)
-        );
+            CreateDodgeEvent(DODGE_UP));
 
         Events_Push(
-            CreateDodgeEvent(DODGE_DOWN)
-        );
+            CreateDodgeEvent(DODGE_DOWN));
     }
 
     Behavior_Update();
@@ -278,34 +237,26 @@ static void Test_AllDodgeDirections(void)
     Test_Assert(
         Float_Equals(
             Behavior_GetDodgeLeftProbability(),
-            0.25f
-        ),
-        "Left probability is 25%"
-    );
+            0.25f),
+        "Left probability is 25%");
 
     Test_Assert(
         Float_Equals(
             Behavior_GetDodgeRightProbability(),
-            0.25f
-        ),
-        "Right probability is 25%"
-    );
+            0.25f),
+        "Right probability is 25%");
 
     Test_Assert(
         Float_Equals(
             Behavior_GetDodgeUpProbability(),
-            0.25f
-        ),
-        "Up probability is 25%"
-    );
+            0.25f),
+        "Up probability is 25%");
 
     Test_Assert(
         Float_Equals(
             Behavior_GetDodgeDownProbability(),
-            0.25f
-        ),
-        "Down probability is 25%"
-    );
+            0.25f),
+        "Down probability is 25%");
 
     float total =
         Behavior_GetDodgeLeftProbability() +
@@ -315,10 +266,8 @@ static void Test_AllDodgeDirections(void)
 
     Test_Assert(
         Float_Equals(total, 1.0f),
-        "Dodge probabilities sum to 1"
-    );
+        "Dodge probabilities sum to 1");
 }
-
 
 /*
  * ---------------------------------------------------------
@@ -335,24 +284,20 @@ static void Test_MovementStatistics(void)
     for (int i = 0; i < 5; i++)
     {
         Events_Push(
-            CreateMoveEvent(MOVE_LEFT)
-        );
+            CreateMoveEvent(MOVE_LEFT));
     }
 
     for (int i = 0; i < 3; i++)
     {
         Events_Push(
-            CreateMoveEvent(MOVE_RIGHT)
-        );
+            CreateMoveEvent(MOVE_RIGHT));
     }
 
     Events_Push(
-        CreateMoveEvent(MOVE_UP)
-    );
+        CreateMoveEvent(MOVE_UP));
 
     Events_Push(
-        CreateMoveEvent(MOVE_DOWN)
-    );
+        CreateMoveEvent(MOVE_DOWN));
 
     Behavior_Update();
 
@@ -361,43 +306,34 @@ static void Test_MovementStatistics(void)
 
     Test_Assert(
         profile->total_movements == 10,
-        "Movement events are counted"
-    );
+        "Movement events are counted");
 
     Test_Assert(
         profile->move_left_count == 5,
-        "Left movement count is correct"
-    );
+        "Left movement count is correct");
 
     Test_Assert(
         profile->move_right_count == 3,
-        "Right movement count is correct"
-    );
+        "Right movement count is correct");
 
     Test_Assert(
         profile->move_up_count == 1,
-        "Up movement count is correct"
-    );
+        "Up movement count is correct");
 
     Test_Assert(
         profile->move_down_count == 1,
-        "Down movement count is correct"
-    );
+        "Down movement count is correct");
 
     Test_Assert(
         Behavior_HasEnoughData() == true,
-        "10 movements are enough data"
-    );
+        "10 movements are enough data");
 
     Test_Assert(
         Float_Equals(
             Behavior_GetMoveLeftProbability(),
-            0.5f
-        ),
-        "Left movement probability is correct"
-    );
+            0.5f),
+        "Left movement probability is correct");
 }
-
 
 /*
  * ---------------------------------------------------------
@@ -412,24 +348,19 @@ static void Test_DamageAndHealing(void)
     Behavior_Init();
 
     Events_Push(
-        CreateDamageEvent(20.0f)
-    );
+        CreateDamageEvent(20.0f));
 
     Events_Push(
-        CreateDamageEvent(30.0f)
-    );
+        CreateDamageEvent(30.0f));
 
     Events_Push(
-        CreateDamageEvent(50.0f)
-    );
+        CreateDamageEvent(50.0f));
 
     Events_Push(
-        CreateHealEvent(40.0f)
-    );
+        CreateHealEvent(40.0f));
 
     Events_Push(
-        CreateHealEvent(10.0f)
-    );
+        CreateHealEvent(10.0f));
 
     Behavior_Update();
 
@@ -438,28 +369,22 @@ static void Test_DamageAndHealing(void)
 
     Test_Assert(
         profile->damage_events == 3,
-        "Damage event count is correct"
-    );
+        "Damage event count is correct");
 
     Test_Assert(
         profile->total_damage_taken == 100,
-        "Total damage taken is correct"
-    );
+        "Total damage taken is correct");
 
     Test_Assert(
         Float_Equals(
             profile->average_damage_taken,
-            100.0f / 3.0f
-        ),
-        "Average damage taken is correct"
-    );
+            100.0f / 3.0f),
+        "Average damage taken is correct");
 
     Test_Assert(
         profile->total_healing == 50,
-        "Total healing is correct"
-    );
+        "Total healing is correct");
 }
-
 
 /*
  * ---------------------------------------------------------
@@ -474,12 +399,10 @@ static void Test_InvalidValues(void)
     Behavior_Init();
 
     Events_Push(
-        CreateDamageEvent(-50.0f)
-    );
+        CreateDamageEvent(-50.0f));
 
     Events_Push(
-        CreateHealEvent(-20.0f)
-    );
+        CreateHealEvent(-20.0f));
 
     Behavior_Update();
 
@@ -488,18 +411,15 @@ static void Test_InvalidValues(void)
 
     Test_Assert(
         profile->damage_events == 1,
-        "Negative damage event is still counted"
-    );
+        "Negative damage event is still counted");
 
     Test_Assert(
         profile->total_damage_taken == 0,
-        "Negative damage does not increase total damage"
-    );
+        "Negative damage does not increase total damage");
 
     Test_Assert(
         profile->total_healing == 0,
-        "Negative healing does not increase total healing"
-    );
+        "Negative healing does not increase total healing");
 }
 
 static void Test_RestoreProfile(void)
@@ -523,27 +443,22 @@ static void Test_RestoreProfile(void)
 
     Test_Assert(
         Behavior_GetProfile()->total_dodges == 0,
-        "Profile is empty before restore"
-    );
+        "Profile is empty before restore");
 
     Test_Assert(
         Behavior_Restore(&saved),
-        "Valid saved profile restores"
-    );
+        "Valid saved profile restores");
 
     Test_Assert(
         Behavior_GetProfile()->total_dodges == 8 &&
-        Float_Equals(Behavior_GetDodgeLeftProbability(), 0.75f),
-        "Restored dodge statistics match"
-    );
+            Float_Equals(Behavior_GetDodgeLeftProbability(), 0.75f),
+        "Restored dodge statistics match");
 
     Test_Assert(
         Float_Equals(
             Behavior_GetProfile()->average_damage_taken,
-            30.0f
-        ),
-        "Restored average damage matches"
-    );
+            30.0f),
+        "Restored average damage matches");
 
     /* Corrupt data must be rejected without changing state. */
     PlayerBehavior bad = saved;
@@ -551,26 +466,89 @@ static void Test_RestoreProfile(void)
 
     Test_Assert(
         !Behavior_Restore(&bad),
-        "Restore rejects direction count above total"
-    );
+        "Restore rejects direction count above total");
 
     bad = saved;
     bad.total_attacks = -5;
 
     Test_Assert(
         !Behavior_Restore(&bad),
-        "Restore rejects negative counters"
-    );
+        "Restore rejects negative counters");
 
     Test_Assert(
         Behavior_GetProfile()->total_dodges == 8,
-        "Rejected restore leaves profile unchanged"
-    );
+        "Rejected restore leaves profile unchanged");
 
     Test_Assert(
         !Behavior_Restore(NULL),
-        "Restore rejects NULL"
-    );
+        "Restore rejects NULL");
+}
+
+static void Test_RecentAttackDecay(void)
+{
+    Events_Init();
+    Behavior_Init();
+
+    GameEvent attack = {0};
+    attack.type = EVENT_PLAYER_ATTACK;
+
+    for (int i = 0; i < 10; i++)
+        Events_Push(attack);
+
+    Behavior_Update();
+
+    float before =
+        Behavior_GetProfile()->recent_attack_score;
+
+    Test_Assert(
+        Float_Equals(before, 10.0f),
+        "Each attack adds 1 to the recent attack score");
+
+    /* Ten seconds pass. Expected: 10 * e^(-10/15) = 5.13 */
+    for (int i = 0; i < 100; i++)
+        Behavior_Tick(0.1f);
+
+    float after =
+        Behavior_GetProfile()->recent_attack_score;
+
+    Test_Assert(
+        fabsf(after - 5.13f) < 0.1f,
+        "Recent attack score decays over time");
+
+    Test_Assert(
+        Behavior_GetProfile()->total_attacks == 10,
+        "Decay does not change the lifetime attack count");
+}
+
+static void Test_BehaviorIsValid(void)
+{
+    Events_Init();
+    Behavior_Init();
+    Behavior_Update();
+
+    PlayerBehavior good = *Behavior_GetProfile();
+
+    Test_Assert(
+        Behavior_IsValid(&good),
+        "A fresh profile is valid");
+
+    PlayerBehavior bad = good;
+    bad.recent_attack_score = NAN;
+
+    Test_Assert(
+        !Behavior_IsValid(&bad),
+        "A NaN attack score is invalid");
+
+    bad = good;
+    bad.total_movements = 2000000000;
+
+    Test_Assert(
+        !Behavior_IsValid(&bad),
+        "An absurdly large counter is invalid");
+
+    Test_Assert(
+        !Behavior_IsValid(NULL),
+        "NULL is invalid");
 }
 
 /*
@@ -600,13 +578,16 @@ int main(void)
 
     Test_RestoreProfile();
 
+    Test_BehaviorIsValid();
+
+    Test_RecentAttackDecay();
+
     printf("\n========================================\n");
     printf(
         "Tests: %d | Passed: %d | Failed: %d\n",
         tests_run,
         tests_passed,
-        tests_run - tests_passed
-    );
+        tests_run - tests_passed);
     printf("========================================\n\n");
 
     return tests_run == tests_passed ? 0 : 1;

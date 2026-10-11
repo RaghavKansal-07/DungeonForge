@@ -1,6 +1,7 @@
 #include "behavior.h"
-
+#include <math.h>
 #include <string.h>
+#include <stddef.h>
 
 /*
  * ---------------------------------------------------------
@@ -9,6 +10,12 @@
  */
 
 static PlayerBehavior behavior;
+
+/*
+ * Time constant for forgetting attacks. After this many
+ * seconds an attack's weight has fallen to about 37%.
+ */
+#define BEHAVIOR_ATTACK_MEMORY_SECONDS 15.0f
 
 /*
  * ---------------------------------------------------------
@@ -126,7 +133,7 @@ void Behavior_Update(void)
         case EVENT_PLAYER_ATTACK:
         {
             behavior.total_attacks++;
-
+            behavior.recent_attack_score += 1.0f;
             break;
         }
 
@@ -303,15 +310,34 @@ const PlayerBehavior *Behavior_GetProfile(void)
     return &behavior;
 }
 
-bool Behavior_Restore(
+void Behavior_Tick(
+    float dt)
+{
+    if (dt <= 0.0f)
+        return;
+
+    if (dt > 0.1f)
+        dt = 0.1f;
+
+    behavior.recent_attack_score *=
+        expf(-dt / BEHAVIOR_ATTACK_MEMORY_SECONDS);
+
+    if (behavior.recent_attack_score < 0.001f)
+        behavior.recent_attack_score = 0.0f;
+}
+
+bool Behavior_IsValid(
     const PlayerBehavior *saved)
 {
     if (saved == NULL)
         return false;
 
-    /*
-     * Reject impossible counters.
-     */
+    if (!isfinite(saved->recent_attack_score) ||
+        saved->recent_attack_score < 0.0f)
+    {
+        return false;
+    }
+
     const int counters[] =
         {
             saved->total_attacks,
@@ -334,13 +360,13 @@ bool Behavior_Restore(
 
     for (int i = 0; i < counter_count; i++)
     {
-        if (counters[i] < 0)
+        if (counters[i] < 0 ||
+            counters[i] > 100000000)
+        {
             return false;
+        }
     }
 
-    /*
-     * A direction count can never exceed its total.
-     */
     if (saved->move_left_count > saved->total_movements ||
         saved->move_right_count > saved->total_movements ||
         saved->move_up_count > saved->total_movements ||
@@ -353,8 +379,20 @@ bool Behavior_Restore(
         return false;
     }
 
+    return true;
+}
+
+bool Behavior_Restore(
+    const PlayerBehavior *saved)
+{
+    if (!Behavior_IsValid(saved))
+        return false;
+
     behavior = *saved;
     behavior.initialized = true;
+
+    if (behavior.recent_attack_score > 100.0f)
+        behavior.recent_attack_score = 100.0f;
 
     /*
      * Never trust saved derived values.
