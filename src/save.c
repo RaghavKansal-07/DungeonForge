@@ -6,6 +6,9 @@
 #include "item_drop.h"
 #include "dungeon.h"
 #include "game.h"
+#include <math.h>
+#include "items.h"
+#include "tilemap.h"
 
 #include <stdint.h>
 #include <string.h>
@@ -27,7 +30,7 @@
  * Increase this whenever the save-file
  * format changes incompatibly.
  */
-#define SAVE_VERSION 3u
+#define SAVE_VERSION 5u
 
 /*
  * Maximum number of item drops that can
@@ -190,6 +193,221 @@ typedef struct
     PlayerBehavior behavior;
 
 } SaveGameData;
+
+/*
+ * ---------------------------------------------------------
+ * Save Validation
+ * ---------------------------------------------------------
+ *
+ * The whole file is checked BEFORE any game state is
+ * touched, so a bad save can never leave a half-loaded
+ * world.
+ */
+
+#define SAVE_PLAYER_MAX_HEALTH PLAYER_MAX_HEALTH
+#define SAVE_MAX_QUANTITY 9999
+#define SAVE_MAX_ENEMY_HEALTH 10000
+#define SAVE_MAX_TIMER 1000.0f
+
+static bool Save_BoolValid(const bool *value)
+{
+    unsigned char raw;
+
+    memcpy(&raw, value, 1);
+
+    return raw <= 1;
+}
+
+static bool Save_TimerValid(float value)
+{
+    return isfinite(value) &&
+           value >= 0.0f &&
+           value <= SAVE_MAX_TIMER;
+}
+
+static bool Save_PositionValid(float x, float y)
+{
+    return isfinite(x) &&
+           isfinite(y) &&
+           x >= 0.0f &&
+           x <= (float)(MAP_WIDTH * TILE_SIZE) &&
+           y >= 0.0f &&
+           y <= (float)(MAP_HEIGHT * TILE_SIZE);
+}
+
+static bool Save_InventoryValid(const Inventory *inventory)
+{
+    if (inventory->item_count < 0 ||
+        inventory->item_count > INVENTORY_MAX_ITEMS)
+    {
+        return false;
+    }
+
+    int used = 0;
+
+    for (int i = 0; i < INVENTORY_MAX_ITEMS; i++)
+    {
+        const InventoryItem *item =
+            &inventory->items[i];
+
+        if ((int)item->type < (int)ITEM_NONE ||
+            (int)item->type > (int)ITEM_ARMOR)
+        {
+            return false;
+        }
+
+        if (item->type == ITEM_NONE)
+        {
+            if (item->item_id != 0 ||
+                item->quantity != 0)
+            {
+                return false;
+            }
+
+            continue;
+        }
+
+        if (!Items_IsValid((ItemId)item->item_id) ||
+            item->quantity < 1 ||
+            item->quantity > SAVE_MAX_QUANTITY)
+        {
+            return false;
+        }
+
+        used++;
+    }
+
+    return used == inventory->item_count;
+}
+
+static bool Save_PlayerValid(const PlayerSaveData *player)
+{
+    return Save_PositionValid(player->x, player->y) &&
+           isfinite(player->speed) &&
+           player->speed > 0.0f &&
+           player->speed <= 2000.0f &&
+           player->health >= 0 &&
+           player->health <= SAVE_PLAYER_MAX_HEALTH &&
+           Save_BoolValid(&player->dead) &&
+           Save_InventoryValid(&player->inventory);
+}
+
+static bool Save_EnemyValid(const EnemySaveData *e)
+{
+    if (!Save_BoolValid(&e->active))
+        return false;
+
+    /*
+     * Inactive slots are simply cleared on load.
+     */
+    if (!e->active)
+        return true;
+
+    if ((int)e->state < (int)ENEMY_STATE_IDLE ||
+        (int)e->state > (int)ENEMY_STATE_DEAD)
+        return false;
+
+    if ((int)e->adaptive_type < (int)ADAPTIVE_AI_HUNTER ||
+        (int)e->adaptive_type > (int)ADAPTIVE_AI_BOSS)
+        return false;
+
+    if ((int)e->adaptive_decision < (int)ADAPTIVE_DECISION_NONE ||
+        (int)e->adaptive_decision > (int)ADAPTIVE_DECISION_KEEP_DISTANCE)
+        return false;
+
+    if ((int)e->boss_state < (int)BOSS_STATE_IDLE ||
+        (int)e->boss_state > (int)BOSS_STATE_ENRAGED)
+        return false;
+
+    if ((int)e->boss_phase < (int)BOSS_PHASE_ONE ||
+        (int)e->boss_phase > (int)BOSS_PHASE_THREE)
+        return false;
+
+    if (!Save_BoolValid(&e->path_valid) ||
+        !Save_BoolValid(&e->is_boss))
+        return false;
+
+    if (e->max_health <= 0 ||
+        e->max_health > SAVE_MAX_ENEMY_HEALTH ||
+        e->health < 0 ||
+        e->health > e->max_health)
+        return false;
+
+    if (!isfinite(e->radius) ||
+        e->radius < 5.0f ||
+        e->radius > 60.0f)
+        return false;
+
+    if (!isfinite(e->speed) ||
+        e->speed < 0.0f ||
+        e->speed > 1000.0f)
+        return false;
+
+    if (!isfinite(e->adaptation_level) ||
+        e->adaptation_level < 0.0f ||
+        e->adaptation_level > 1.0f)
+        return false;
+
+    if (!Save_PositionValid(e->x, e->y) ||
+        !Save_PositionValid(e->target_x, e->target_y) ||
+        !Save_PositionValid(e->waypoint_x, e->waypoint_y))
+        return false;
+
+    return Save_TimerValid(e->attack_cooldown) &&
+           Save_TimerValid(e->attack_timer) &&
+           Save_TimerValid(e->hurt_timer) &&
+           Save_TimerValid(e->awareness_timer) &&
+           Save_TimerValid(e->path_timer) &&
+           Save_TimerValid(e->adaptive_timer) &&
+           Save_TimerValid(e->boss_state_timer) &&
+           Save_TimerValid(e->boss_special_timer) &&
+           Save_TimerValid(e->boss_recovery_timer);
+}
+
+static bool Save_DropValid(const ItemDropSaveData *drop)
+{
+    if (!Save_BoolValid(&drop->active))
+        return false;
+
+    if (!drop->active)
+        return true;
+
+    return Save_PositionValid(drop->x, drop->y) &&
+           Items_IsValid(drop->item_id) &&
+           drop->quantity >= 1 &&
+           drop->quantity <= SAVE_MAX_QUANTITY;
+}
+
+static bool Save_ValidateData(const SaveGameData *data)
+{
+    if (!Save_PlayerValid(&data->player))
+        return false;
+
+    int boss_count = 0;
+
+    for (int i = 0; i < MAX_ENEMIES; i++)
+    {
+        if (!Save_EnemyValid(&data->enemies[i]))
+            return false;
+
+        if (data->enemies[i].active &&
+            data->enemies[i].is_boss)
+        {
+            boss_count++;
+        }
+    }
+
+    if (boss_count > 1)
+        return false;
+
+    for (int i = 0; i < SAVE_MAX_DROPS; i++)
+    {
+        if (!Save_DropValid(&data->drops[i]))
+            return false;
+    }
+
+    return Behavior_IsValid(&data->behavior);
+}
 
 /*
  * ---------------------------------------------------------
@@ -464,6 +682,13 @@ bool Load_Game(void)
     {
         return false;
     }
+
+    /*
+     * Validate the ENTIRE file before touching any
+     * game state.
+     */
+    if (!Save_ValidateData(&save_data))
+        return false;
 
     /*
      * -----------------------------------------------------

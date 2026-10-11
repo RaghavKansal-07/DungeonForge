@@ -143,7 +143,12 @@ void Game_Init(void)
      * If audio initialization fails, the game
      * can still continue without sound.
      */
-    Audio_Init();
+    if (!Audio_Init())
+    {
+        TraceLog(
+            LOG_WARNING,
+            "Some sounds failed to load. Run the game from the project root.");
+    }
 
     Events_Init();
 
@@ -246,6 +251,9 @@ void Game_Update(void)
      * NORMAL GAMEPLAY
      * ========================================================
      */
+
+    Behavior_Tick(
+        GetFrameTime());
 
     Player_Update();
 
@@ -539,7 +547,7 @@ static void Game_RenderPlayerHUD(void)
     const int bar_height = 14;
 
     float health_ratio =
-        (float)player->health / 100.0f;
+        (float)player->health / (float)PLAYER_MAX_HEALTH;
 
     if (health_ratio < 0.0f)
         health_ratio = 0.0f;
@@ -609,7 +617,7 @@ static void Game_RenderPlayerHUD(void)
         TextFormat(
             "%d / %d",
             player->health,
-            100);
+            PLAYER_MAX_HEALTH);
 
     int health_text_width =
         MeasureText(
@@ -1005,12 +1013,12 @@ static void Game_RenderBossHUD(void)
     int marker_one =
         bar_x +
         (int)((float)bar_width *
-              0.33f);
+              0.40f);
 
     int marker_two =
         bar_x +
         (int)((float)bar_width *
-              0.66f);
+              0.70f);
 
     DrawLine(
         marker_one,

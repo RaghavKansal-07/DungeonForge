@@ -88,17 +88,20 @@ bool Audio_Init(void)
     player_damage_sound =
         LoadSound("assets/audio/player_damage.ogg");
 
-    if (!IsSoundValid(player_damage_sound))
+    bool all_loaded =
+        IsSoundValid(player_attack_sound) &&
+        IsSoundValid(player_damage_sound) &&
+        IsSoundValid(enemy_hit_sound) &&
+        IsSoundValid(enemy_death_sound) &&
+        IsSoundValid(item_pickup_sound) &&
+        IsSoundValid(boss_attack_sound) &&
+        IsSoundValid(boss_phase_sound);
+
+    if (!all_loaded)
     {
         TraceLog(
-            LOG_ERROR,
-            "Failed to load player_damage.ogg");
-    }
-    else
-    {
-        TraceLog(
-            LOG_INFO,
-            "Loaded player_damage.ogg successfully");
+            LOG_WARNING,
+            "One or more audio files failed to load");
     }
 
     enemy_hit_sound =
@@ -120,7 +123,7 @@ bool Audio_Init(void)
 
     Audio_ApplyVolume();
 
-    return true;
+    return all_loaded;
 }
 
 /* -------------------------------------------------------------------------- */
