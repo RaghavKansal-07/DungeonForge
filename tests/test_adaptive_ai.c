@@ -43,6 +43,7 @@ static void ResetSystems(void)
     Events_Init();
     Behavior_Init();
     AdaptiveAI_Init();
+    AdaptiveAI_Seed(12345u);
 }
 
 static void PushEvent(
@@ -106,6 +107,30 @@ static void CreateRightDodgeProfile(void)
     PushEvent(
         EVENT_PLAYER_DODGE,
         DODGE_LEFT,
+        MOVE_NONE,
+        0.0f);
+}
+
+/*
+ * Generate a strongly upward dodge profile.
+ *
+ * 9 UP
+ * 1 DOWN
+ */
+static void CreateUpDodgeProfile(void)
+{
+    for (int i = 0; i < 9; i++)
+    {
+        PushEvent(
+            EVENT_PLAYER_DODGE,
+            DODGE_UP,
+            MOVE_NONE,
+            0.0f);
+    }
+
+    PushEvent(
+        EVENT_PLAYER_DODGE,
+        DODGE_DOWN,
         MOVE_NONE,
         0.0f);
 }
@@ -328,57 +353,52 @@ static void TestHunterDodgePrediction(void)
     int right_predictions = 0;
     int other_predictions = 0;
     int adapted_count = 0;
+    int bad_results = 0;
 
     /*
      * Run many decisions because the AI is intentionally
-     * probabilistic.
+     * probabilistic. Failures are counted inside the loop
+     * and asserted once afterwards.
      */
     for (int i = 0; i < 1000; i++)
     {
         AdaptiveDecisionResult result =
             AdaptiveAI_Decide(ADAPTIVE_AI_HUNTER);
 
-        if (result.adapted)
+        if (result.type != ADAPTIVE_AI_HUNTER ||
+            !IsValidDecision(result.decision) ||
+            result.probability < 0.0f ||
+            result.probability > 1.0f ||
+            result.adaptation_level < 0.0f ||
+            result.adaptation_level > 1.0f)
         {
-            adapted_count++;
-
-            if (result.decision ==
-                ADAPTIVE_DECISION_PREDICT_LEFT)
-            {
-                left_predictions++;
-            }
-            else if (result.decision ==
-                     ADAPTIVE_DECISION_PREDICT_RIGHT)
-            {
-                right_predictions++;
-            }
-            else
-            {
-                other_predictions++;
-            }
+            bad_results++;
         }
 
-        TEST(
-            result.type == ADAPTIVE_AI_HUNTER,
-            "Hunter result retains Hunter type");
+        if (!result.adapted)
+            continue;
 
-        if (i == 0)
+        adapted_count++;
+
+        if (result.decision ==
+            ADAPTIVE_DECISION_PREDICT_LEFT)
         {
-            TEST(
-                IsValidDecision(result.decision),
-                "Hunter returns a valid decision");
-
-            TEST(
-                result.probability >= 0.0f &&
-                    result.probability <= 1.0f,
-                "Hunter probability is within valid range");
-
-            TEST(
-                result.adaptation_level >= 0.0f &&
-                    result.adaptation_level <= 1.0f,
-                "Hunter adaptation level is within valid range");
+            left_predictions++;
+        }
+        else if (result.decision ==
+                 ADAPTIVE_DECISION_PREDICT_RIGHT)
+        {
+            right_predictions++;
+        }
+        else
+        {
+            other_predictions++;
         }
     }
+
+    TEST(
+        bad_results == 0,
+        "Hunter results keep correct type, valid decision and ranges across 1000 decisions");
 
     TEST(
         adapted_count > 0,
@@ -389,8 +409,8 @@ static void TestHunterDodgePrediction(void)
         "Hunter predominantly predicts the stronger left tendency");
 
     TEST(
-        other_predictions >= 0,
-        "Hunter directional result accounting is valid");
+        other_predictions == 0,
+        "Hunter only predicts left or right when only those were observed");
 }
 
 static void TestHunterMovementFallback(void)
@@ -755,12 +775,11 @@ static void TestDecisionOnlyWhenAdapted(void)
     CreateAttackProfile(20);
 
     AdaptiveAIType types[] =
-    {
-        ADAPTIVE_AI_HUNTER,
-        ADAPTIVE_AI_GUARDIAN,
-        ADAPTIVE_AI_ASSASSIN,
-        ADAPTIVE_AI_BOSS
-    };
+        {
+            ADAPTIVE_AI_HUNTER,
+            ADAPTIVE_AI_GUARDIAN,
+            ADAPTIVE_AI_ASSASSIN,
+            ADAPTIVE_AI_BOSS};
 
     int inconsistent = 0;
 
@@ -772,6 +791,69 @@ static void TestDecisionOnlyWhenAdapted(void)
 
     TEST(inconsistent == 0,
          "No archetype returns a decision unless the adaptation roll succeeded");
+}
+
+static void TestGuardianSmoothAdaptation(void)
+{
+    ResetSystems();
+    CreateAttackProfile(30);
+
+    AdaptiveDecisionResult result =
+        AdaptiveAI_Decide(ADAPTIVE_AI_GUARDIAN);
+
+    TEST(
+        result.adaptation_level > 0.70f &&
+            result.adaptation_level <= 0.85f,
+        "Guardian reacts more strongly to heavier attacking");
+}
+
+static void TestGuardianForgets(void)
+{
+    ResetSystems();
+    CreateAttackProfile(30);
+
+    /* 30 seconds without attacking. */
+    for (int i = 0; i < 300; i++)
+        Behavior_Tick(0.1f);
+
+    AdaptiveDecisionResult result =
+        AdaptiveAI_Decide(ADAPTIVE_AI_GUARDIAN);
+
+    TEST(
+        result.decision == ADAPTIVE_DECISION_NONE &&
+            result.adapted == false,
+        "Guardian stops adapting after the player stops attacking");
+}
+
+static void TestAssassinVerticalDodge(void)
+{
+    ResetSystems();
+    CreateUpDodgeProfile();
+
+    DecisionStats s = CollectStats(ADAPTIVE_AI_ASSASSIN, 1000);
+
+    TEST(s.inconsistent == 0,
+         "Assassin (vertical dodge): decision present exactly when adapted");
+
+    TEST(s.flank_left == 0 && s.flank_right == 0,
+         "Assassin does not flank sideways against a vertical dodge habit");
+
+    TEST(s.other > 760 && s.other < 930,
+         "Assassin closes distance about 85% of the time against vertical dodges");
+}
+
+static void TestAssassinNoTendency(void)
+{
+    ResetSystems();
+
+    /* Enough observations to pass the data gate,
+       but only attacks: no movement or dodge tendency. */
+    CreateAttackProfile(12);
+
+    DecisionStats s = CollectStats(ADAPTIVE_AI_ASSASSIN, 200);
+
+    TEST(s.adapted == 0,
+         "Assassin does not adapt when no movement or dodge tendency exists");
 }
 
 /*
@@ -804,12 +886,21 @@ int main(void)
     TestAssassinRightDodge();
     TestAssassinMovementFallback();
 
+    TestAssassinVerticalDodge();
+    TestAssassinNoTendency();
+
     TestBossDodgeAdaptation();
     TestBossMovementFallback();
 
     TestDecisionValidity();
 
+    TestDecisionOnlyWhenAdapted();
+
     TestHunterIsProbabilistic();
+
+    TestGuardianSmoothAdaptation();
+
+    TestGuardianForgets();
 
     printf("\n");
     printf("========================================\n");

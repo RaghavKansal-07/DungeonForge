@@ -21,6 +21,7 @@ SRC = src/main.c \
       src/combat.c \
       src/pathfinding.c \
       src/dungeon.c \
+      src/rng.c \
       src/inventory.c \
       src/items.c \
       src/item_drop.c \
@@ -62,7 +63,18 @@ TEST_ADAPTIVE_AI = tests/test_adaptive_ai.exe
 TEST_ADAPTIVE_AI_SRC = tests/test_adaptive_ai.c \
                        src/adaptive_ai.c \
                        src/behavior.c \
-                       src/events.c
+                       src/events.c \
+                       src/rng.c
+
+
+# ---------------------------------------------------------
+# RNG Tests
+# ---------------------------------------------------------
+
+TEST_RNG = tests/test_rng.exe
+
+TEST_RNG_SRC = tests/test_rng.c \
+               src/rng.c
 
 
 # ---------------------------------------------------------
@@ -87,11 +99,20 @@ TEST_PATHFINDING_SRC = tests/test_pathfinding.c \
 
 
 # ---------------------------------------------------------
+# Default target
+# ---------------------------------------------------------
+
+.PHONY: all test clean
+
+all: $(TARGET)
+
+
+# ---------------------------------------------------------
 # Main Game
 # ---------------------------------------------------------
 
 $(TARGET): $(SRC)
-	$(CC) $(CFLAGS) $(INCLUDES) $(SRC) $(LDFLAGS) $(LIBS) -o $(TARGET)
+	$(CC) $(CFLAGS) $(INCLUDES) $(SRC) $(LDFLAGS) $(LIBS) -o $(TARGET) -lm
 
 
 # ---------------------------------------------------------
@@ -119,6 +140,14 @@ $(TEST_ADAPTIVE_AI): $(TEST_ADAPTIVE_AI_SRC)
 
 
 # ---------------------------------------------------------
+# RNG Test
+# ---------------------------------------------------------
+
+$(TEST_RNG): $(TEST_RNG_SRC)
+	$(CC) $(CFLAGS) -Iinclude $(TEST_RNG_SRC) -o $(TEST_RNG)
+
+
+# ---------------------------------------------------------
 # Serialization Test
 # ---------------------------------------------------------
 
@@ -138,10 +167,11 @@ $(TEST_PATHFINDING): $(TEST_PATHFINDING_SRC)
 # Run All Tests
 # ---------------------------------------------------------
 
-test: $(TEST_BEHAVIOR) $(TEST_EVENTS) $(TEST_ADAPTIVE_AI) $(TEST_SERIALIZATION) $(TEST_PATHFINDING)
+test: $(TEST_BEHAVIOR) $(TEST_EVENTS) $(TEST_ADAPTIVE_AI) $(TEST_RNG) $(TEST_SERIALIZATION) $(TEST_PATHFINDING)
 	./$(TEST_BEHAVIOR)
 	./$(TEST_EVENTS)
 	./$(TEST_ADAPTIVE_AI)
+	./$(TEST_RNG)
 	./$(TEST_SERIALIZATION)
 	./$(TEST_PATHFINDING)
 
@@ -155,6 +185,7 @@ clean:
 	rm -f $(TEST_BEHAVIOR)
 	rm -f $(TEST_EVENTS)
 	rm -f $(TEST_ADAPTIVE_AI)
+	rm -f $(TEST_RNG)
 	rm -f $(TEST_SERIALIZATION)
 	rm -f $(TEST_PATHFINDING)
 	rm -f tests/test_serialization.dat

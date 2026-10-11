@@ -1,7 +1,7 @@
 #include "adaptive_ai.h"
 #include "behavior.h"
 
-#include <stdlib.h>
+#include "rng.h"
 #include <time.h>
 
 static bool adaptive_ai_initialized = false;
@@ -27,13 +27,14 @@ static float ClampFloat(
 }
 
 /*
- * Generate a random floating-point number
- * between 0.0 and 1.0.
+ * The adaptive AI owns its generator, separate from
+ * dungeon generation.
  */
+static Rng ai_rng = {1u};
+
 static float RandomFloat(void)
 {
-    return (float)rand() /
-           (float)RAND_MAX;
+    return Rng_Float(&ai_rng);
 }
 
 /*
@@ -159,17 +160,22 @@ static AdaptiveDecision SelectPredictedDirection(
 void AdaptiveAI_Init(void)
 {
     /*
-     * Seed the random number generator once.
-     *
-     * Adaptive AI uses probability rather than
-     * deterministic behavior.
+     * Seed once from the clock. Adaptive AI is meant
+     * to be unpredictable between runs.
      */
-    srand(
-        (unsigned int)time(NULL));
+    Rng_Seed(
+        &ai_rng,
+        (uint32_t)time(NULL));
 
     adaptive_ai_initialized = true;
 }
 
+void AdaptiveAI_Seed(unsigned int seed)
+{
+    Rng_Seed(&ai_rng, seed);
+
+    adaptive_ai_initialized = true;
+}
 /*
  * ---------------------------------------------------------
  * Hunter
@@ -360,48 +366,47 @@ AdaptiveAI_DecideGuardian(
 
     result.adapted = false;
 
+    /*
+     * Not enough recent attacks to judge the player.
+     */
     if (profile == NULL ||
-        profile->total_attacks < 5)
+        profile->recent_attack_score < 5.0f)
     {
         return result;
     }
 
-    /*
-     * More attacks indicate a more aggressive
-     * player.
-     */
-    if (profile->total_attacks >= 20)
+    float level;
+
+    if (profile->recent_attack_score >= 20.0f)
     {
+        /*
+         * Heavy recent attacking: defend. The more
+         * intense the attacking, the stronger the reaction.
+         */
         result.decision =
             ADAPTIVE_DECISION_ATTACK_DEFENSIVE;
 
-        result.adaptation_level =
-            0.70f;
-
-        result.probability =
-            0.70f;
-
-        if (RandomFloat() <= 0.70f)
-        {
-            result.adapted = true;
-        }
+        level =
+            ClampFloat(
+                0.70f +
+                    (profile->recent_attack_score - 20.0f) *
+                        0.01f,
+                0.70f,
+                0.85f);
     }
     else
     {
         result.decision =
             ADAPTIVE_DECISION_ATTACK_AGGRESSIVE;
 
-        result.adaptation_level =
-            0.40f;
-
-        result.probability =
-            0.40f;
-
-        if (RandomFloat() <= 0.40f)
-        {
-            result.adapted = true;
-        }
+        level = 0.40f;
     }
+
+    result.adaptation_level = level;
+    result.probability = level;
+
+    if (RandomFloat() <= level)
+        result.adapted = true;
 
     return result;
 }
@@ -438,117 +443,65 @@ AdaptiveAI_DecideAssassin(
     }
 
     /*
-     * -----------------------------------------------------
-     * Prefer Dodge Behavior
-     * -----------------------------------------------------
+     * Prefer dodge behavior. Fall back to movement
+     * when there are too few dodges.
      */
+    float left;
+    float right;
+    float up;
+    float down;
 
     if (profile->total_dodges >= 3)
     {
-        float left =
-            profile->dodge_left_probability;
-
-        float right =
-            profile->dodge_right_probability;
-
-        float up =
-            profile->dodge_up_probability;
-
-        float down =
-            profile->dodge_down_probability;
-
-        /*
-         * Find strongest horizontal tendency.
-         */
-        float horizontal_strength =
-            left;
-
-        if (right > horizontal_strength)
-            horizontal_strength = right;
-
-        /*
-         * Vertical dodge tendencies do not directly
-         * map to left/right flanking.
-         *
-         * Determine the intended flank direction.
-         */
-        AdaptiveDecision decision;
-
-        if (left >= right)
-        {
-            decision =
-                ADAPTIVE_DECISION_FLANK_RIGHT;
-        }
-        else
-        {
-            decision =
-                ADAPTIVE_DECISION_FLANK_LEFT;
-        }
-
-        /*
-         * If vertical behavior dominates, use the
-         * vertical tendency as the adaptation strength.
-         */
-        float strongest =
-            horizontal_strength;
-
-        if (up > strongest)
-            strongest = up;
-
-        if (down > strongest)
-            strongest = down;
-
-        result.probability =
-            strongest;
-
-        result.adaptation_level =
-            ClampFloat(
-                strongest,
-                0.0f,
-                0.85f);
-
-        if (RandomFloat() <=
-            result.adaptation_level)
-        {
-            result.decision =
-                decision;
-
-            result.adapted = true;
-        }
-
-        return result;
+        left = profile->dodge_left_probability;
+        right = profile->dodge_right_probability;
+        up = profile->dodge_up_probability;
+        down = profile->dodge_down_probability;
+    }
+    else
+    {
+        left = profile->move_left_probability;
+        right = profile->move_right_probability;
+        up = profile->move_up_probability;
+        down = profile->move_down_probability;
     }
 
-    /*
-     * -----------------------------------------------------
-     * Movement Fallback
-     * -----------------------------------------------------
-     */
+    float horizontal =
+        (left > right) ? left : right;
 
-    float left =
-        profile->move_left_probability;
-
-    float right =
-        profile->move_right_probability;
+    float vertical =
+        (up > down) ? up : down;
 
     float strongest =
-        left;
-
-    if (right > strongest)
-        strongest = right;
+        (horizontal > vertical)
+            ? horizontal
+            : vertical;
 
     /*
-     * Assassin chooses the opposite side
-     * of the player's strongest movement tendency.
+     * No observed tendency: nothing to adapt to.
      */
-    if (left > right)
+    if (strongest <= 0.0f)
+        return result;
+
+    AdaptiveDecision decision;
+
+    if (vertical > horizontal)
     {
-        result.decision =
+        /*
+         * A vertical habit cannot be flanked sideways.
+         * Rush the player instead.
+         */
+        decision =
+            ADAPTIVE_DECISION_CLOSE_DISTANCE;
+    }
+    else if (left >= right)
+    {
+        decision =
             ADAPTIVE_DECISION_FLANK_RIGHT;
     }
     else
     {
-        result.decision =
+        decision =
             ADAPTIVE_DECISION_FLANK_LEFT;
     }
 
@@ -564,6 +517,9 @@ AdaptiveAI_DecideAssassin(
     if (RandomFloat() <=
         result.adaptation_level)
     {
+        result.decision =
+            decision;
+
         result.adapted = true;
     }
 

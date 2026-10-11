@@ -18,7 +18,6 @@ typedef enum
 
 } AdaptiveAIType;
 
-
 /*
  * Result of an adaptive AI decision.
  *
@@ -53,7 +52,6 @@ typedef enum
 
 } AdaptiveDecision;
 
-
 /*
  * Result returned by the adaptive AI system.
  */
@@ -87,14 +85,12 @@ typedef struct
 
 } AdaptiveDecisionResult;
 
-
 /*
  * Initialize the adaptive AI system.
  *
  * Call once when starting a new run.
  */
 void AdaptiveAI_Init(void);
-
 
 /*
  * Generate an adaptive decision for an enemy.
@@ -103,24 +99,26 @@ void AdaptiveAI_Init(void);
  * the player's behavior are considered.
  */
 AdaptiveDecisionResult AdaptiveAI_Decide(
-    AdaptiveAIType type
-);
-
+    AdaptiveAIType type);
 
 /*
  * Get a human-readable name for an enemy type.
  */
 const char *AdaptiveAI_GetTypeName(
-    AdaptiveAIType type
-);
-
+    AdaptiveAIType type);
 
 /*
  * Get a human-readable name for an
  * adaptive decision.
  */
 const char *AdaptiveAI_GetDecisionName(
-    AdaptiveDecision decision
-);
+    AdaptiveDecision decision);
+
+/*
+ * Seed the AI's random generator explicitly.
+ * Used by tests so results are reproducible.
+ */
+void AdaptiveAI_Seed(
+    unsigned int seed);
 
 #endif

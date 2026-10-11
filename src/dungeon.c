@@ -1,13 +1,14 @@
 #include "dungeon.h"
 #include "tilemap.h"
 
-#include <stdlib.h>
+#include "rng.h"
 #include <stdbool.h>
+#include <stddef.h>
 
-#define MIN_ROOM_WIDTH  5
+#define MIN_ROOM_WIDTH 5
 #define MIN_ROOM_HEIGHT 4
 
-#define MAX_ROOM_WIDTH  9
+#define MAX_ROOM_WIDTH 9
 #define MAX_ROOM_HEIGHT 7
 
 #define ROOM_PADDING 1
@@ -25,21 +26,25 @@
  */
 #define CORRIDOR_WIDTH 2
 
+/*
+ * The dungeon owns its generator, so generating a map
+ * never affects any other system's randomness.
+ */
+static Rng dungeon_rng = {1u};
 
 static int RandomRange(
     int min,
-    int max
-)
+    int max)
 {
-    return min +
-           rand() % (max - min + 1);
+    return Rng_Range(
+        &dungeon_rng,
+        min,
+        max);
 }
-
 
 static bool Dungeon_RoomsOverlap(
     const DungeonRoom *a,
-    const DungeonRoom *b
-)
+    const DungeonRoom *b)
 {
     /*
      * Add a one-tile padding around each room.
@@ -90,11 +95,9 @@ static bool Dungeon_RoomsOverlap(
     return true;
 }
 
-
 static bool Dungeon_CanPlaceRoom(
     const Dungeon *dungeon,
-    const DungeonRoom *room
-)
+    const DungeonRoom *room)
 {
     for (int i = 0;
          i < dungeon->room_count;
@@ -111,10 +114,8 @@ static bool Dungeon_CanPlaceRoom(
     return true;
 }
 
-
 static void Dungeon_CalculateRoomCenter(
-    DungeonRoom *room
-)
+    DungeonRoom *room)
 {
     room->center_x =
         room->x +
@@ -125,10 +126,8 @@ static void Dungeon_CalculateRoomCenter(
         room->height / 2;
 }
 
-
 static void Dungeon_CarveRoom(
-    const DungeonRoom *room
-)
+    const DungeonRoom *room)
 {
     for (int y = room->y;
          y < room->y + room->height;
@@ -141,12 +140,10 @@ static void Dungeon_CarveRoom(
             TileMap_SetTile(
                 x,
                 y,
-                TILE_FLOOR
-            );
+                TILE_FLOOR);
         }
     }
 }
-
 
 /*
  * Carve a horizontal corridor that is
@@ -155,8 +152,7 @@ static void Dungeon_CarveRoom(
 static void Dungeon_CarveHorizontalCorridor(
     int x1,
     int x2,
-    int y
-)
+    int y)
 {
     int start_x = x1;
     int end_x = x2;
@@ -179,12 +175,10 @@ static void Dungeon_CarveHorizontalCorridor(
             TileMap_SetTile(
                 x,
                 y + offset,
-                TILE_FLOOR
-            );
+                TILE_FLOOR);
         }
     }
 }
-
 
 /*
  * Carve a vertical corridor that is
@@ -193,8 +187,7 @@ static void Dungeon_CarveHorizontalCorridor(
 static void Dungeon_CarveVerticalCorridor(
     int y1,
     int y2,
-    int x
-)
+    int x)
 {
     int start_y = y1;
     int end_y = y2;
@@ -217,17 +210,14 @@ static void Dungeon_CarveVerticalCorridor(
             TileMap_SetTile(
                 x + offset,
                 y,
-                TILE_FLOOR
-            );
+                TILE_FLOOR);
         }
     }
 }
 
-
 static void Dungeon_CarveCorridor(
     const DungeonRoom *a,
-    const DungeonRoom *b
-)
+    const DungeonRoom *b)
 {
     int x1 = a->center_x;
     int y1 = a->center_y;
@@ -248,16 +238,13 @@ static void Dungeon_CarveCorridor(
     Dungeon_CarveHorizontalCorridor(
         x1,
         x2,
-        y1
-    );
+        y1);
 
     Dungeon_CarveVerticalCorridor(
         y1,
         y2,
-        x2
-    );
+        x2);
 }
-
 
 /*
  * Calculate squared distance between
@@ -268,8 +255,7 @@ static void Dungeon_CarveCorridor(
  */
 static int Dungeon_RoomDistanceSquared(
     const DungeonRoom *a,
-    const DungeonRoom *b
-)
+    const DungeonRoom *b)
 {
     int dx =
         a->center_x -
@@ -282,7 +268,6 @@ static int Dungeon_RoomDistanceSquared(
     return dx * dx + dy * dy;
 }
 
-
 /*
  * Add a connection to the dungeon graph.
  *
@@ -291,8 +276,7 @@ static int Dungeon_RoomDistanceSquared(
 static void Dungeon_AddConnection(
     Dungeon *dungeon,
     int room_a,
-    int room_b
-)
+    int room_b)
 {
     if (dungeon == NULL)
         return;
@@ -352,16 +336,13 @@ static void Dungeon_AddConnection(
     }
 
     DungeonConnection *connection =
-        &dungeon->connections[
-            dungeon->connection_count
-        ];
+        &dungeon->connections[dungeon->connection_count];
 
     connection->room_a = room_a;
     connection->room_b = room_b;
 
     dungeon->connection_count++;
 }
-
 
 /*
  * Connect all rooms using a spatially-aware
@@ -386,8 +367,7 @@ static void Dungeon_AddConnection(
  *        rather than generation order.
  */
 static void Dungeon_ConnectRooms(
-    Dungeon *dungeon
-)
+    Dungeon *dungeon)
 {
     if (dungeon == NULL)
         return;
@@ -426,9 +406,7 @@ static void Dungeon_ConnectRooms(
              room_a < dungeon->room_count;
              room_a++)
         {
-            if (!dungeon->rooms[
-                    room_a
-                ].connected)
+            if (!dungeon->rooms[room_a].connected)
             {
                 continue;
             }
@@ -437,9 +415,7 @@ static void Dungeon_ConnectRooms(
                  room_b < dungeon->room_count;
                  room_b++)
             {
-                if (dungeon->rooms[
-                        room_b
-                    ].connected)
+                if (dungeon->rooms[room_b].connected)
                 {
                     continue;
                 }
@@ -447,8 +423,7 @@ static void Dungeon_ConnectRooms(
                 int distance =
                     Dungeon_RoomDistanceSquared(
                         &dungeon->rooms[room_a],
-                        &dungeon->rooms[room_b]
-                    );
+                        &dungeon->rooms[room_b]);
 
                 if (best_room_a == -1 ||
                     distance < best_distance)
@@ -482,16 +457,13 @@ static void Dungeon_ConnectRooms(
          */
         Dungeon_CarveCorridor(
             &dungeon->rooms[best_room_a],
-            &dungeon->rooms[best_room_b]
-        );
+            &dungeon->rooms[best_room_b]);
 
         /*
          * Mark the new room as part of the
          * connected dungeon network.
          */
-        dungeon->rooms[
-            best_room_b
-        ].connected = true;
+        dungeon->rooms[best_room_b].connected = true;
 
         connected_count++;
 
@@ -502,15 +474,12 @@ static void Dungeon_ConnectRooms(
         Dungeon_AddConnection(
             dungeon,
             best_room_a,
-            best_room_b
-        );
+            best_room_b);
     }
 }
 
-
 static void Dungeon_GenerateRooms(
-    Dungeon *dungeon
-)
+    Dungeon *dungeon)
 {
     int attempts = 0;
 
@@ -526,14 +495,12 @@ static void Dungeon_GenerateRooms(
         room.width =
             RandomRange(
                 MIN_ROOM_WIDTH,
-                MAX_ROOM_WIDTH
-            );
+                MAX_ROOM_WIDTH);
 
         room.height =
             RandomRange(
                 MIN_ROOM_HEIGHT,
-                MAX_ROOM_HEIGHT
-            );
+                MAX_ROOM_HEIGHT);
 
         /*
          * Leave at least one wall tile around
@@ -558,20 +525,17 @@ static void Dungeon_GenerateRooms(
         room.x =
             RandomRange(
                 1,
-                max_x
-            );
+                max_x);
 
         room.y =
             RandomRange(
                 1,
-                max_y
-            );
+                max_y);
 
         room.connected = false;
 
         Dungeon_CalculateRoomCenter(
-            &room
-        );
+            &room);
 
         /*
          * Only accept the room if it does not
@@ -584,18 +548,14 @@ static void Dungeon_GenerateRooms(
             continue;
         }
 
-        dungeon->rooms[
-            dungeon->room_count
-        ] = room;
+        dungeon->rooms[dungeon->room_count] = room;
 
         dungeon->room_count++;
 
         Dungeon_CarveRoom(
-            &room
-        );
+            &room);
     }
 }
-
 
 /*
  * Check whether two rooms share a direct
@@ -604,8 +564,7 @@ static void Dungeon_GenerateRooms(
 bool Dungeon_AreRoomsConnected(
     const Dungeon *dungeon,
     int room_a,
-    int room_b
-)
+    int room_b)
 {
     if (dungeon == NULL)
         return false;
@@ -650,15 +609,13 @@ bool Dungeon_AreRoomsConnected(
     return false;
 }
 
-
 /*
  * Count how many rooms are directly
  * connected to the specified room.
  */
 int Dungeon_GetRoomConnectionCount(
     const Dungeon *dungeon,
-    int room_index
-)
+    int room_index)
 {
     if (dungeon == NULL)
         return 0;
@@ -691,7 +648,6 @@ int Dungeon_GetRoomConnectionCount(
     return count;
 }
 
-
 /*
  * Get a specific neighboring room.
  *
@@ -701,8 +657,7 @@ int Dungeon_GetRoomConnectionCount(
 int Dungeon_GetConnectedRoom(
     const Dungeon *dungeon,
     int room_index,
-    int connection_index
-)
+    int connection_index)
 {
     if (dungeon == NULL)
         return -1;
@@ -769,12 +724,10 @@ int Dungeon_GetConnectedRoom(
     return -1;
 }
 
-
 bool Dungeon_GetPlayerSpawn(
     const Dungeon *dungeon,
     float *x,
-    float *y
-)
+    float *y)
 {
     /*
      * Validate the output pointers.
@@ -812,7 +765,6 @@ bool Dungeon_GetPlayerSpawn(
     return true;
 }
 
-
 /*
  * Get the seed used to generate the dungeon.
  *
@@ -821,8 +773,7 @@ bool Dungeon_GetPlayerSpawn(
  * during loading.
  */
 unsigned int Dungeon_GetSeed(
-    const Dungeon *dungeon
-)
+    const Dungeon *dungeon)
 {
     if (dungeon == NULL)
         return 0;
@@ -830,11 +781,9 @@ unsigned int Dungeon_GetSeed(
     return dungeon->seed;
 }
 
-
 void Dungeon_Init(
     Dungeon *dungeon,
-    unsigned int seed
-)
+    unsigned int seed)
 {
     if (dungeon == NULL)
         return;
@@ -844,11 +793,11 @@ void Dungeon_Init(
     dungeon->seed = seed;
 
     /*
-     * Seed the pseudo-random number generator.
+     * Seed the dungeon's private generator.
      *
      * The same seed produces the same dungeon.
      */
-    srand(seed);
+    Rng_Seed(&dungeon_rng, seed);
 
     /*
      * Reset every room slot.
@@ -892,8 +841,7 @@ void Dungeon_Init(
      * Generate and carve rooms.
      */
     Dungeon_GenerateRooms(
-        dungeon
-    );
+        dungeon);
 
     /*
      * Connect the generated rooms using
@@ -903,6 +851,5 @@ void Dungeon_Init(
      * edge in the dungeon graph.
      */
     Dungeon_ConnectRooms(
-        dungeon
-    );
+        dungeon);
 }
