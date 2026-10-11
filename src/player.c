@@ -11,10 +11,19 @@
 
 static Player player;
 
+/*
+ * A held direction is recorded at most this often.
+ * A new direction is always recorded immediately.
+ */
+#define PLAYER_MOVE_EVENT_INTERVAL 0.25f
+
+static float move_event_timer = 0.0f;
+static MoveDirection last_event_move_x = MOVE_NONE;
+static MoveDirection last_event_move_y = MOVE_NONE;
+
 static void Player_PushMoveEvent(
     MoveDirection direction,
-    float value
-)
+    float value)
 {
     GameEvent event = {0};
 
@@ -28,7 +37,6 @@ static void Player_PushMoveEvent(
     Events_Push(event);
 }
 
-#define PLAYER_MAX_HEALTH 100
 #define HEALTH_POTION_HEAL 25
 
 /*
@@ -41,7 +49,6 @@ static void Player_PushMoveEvent(
  * Keep these values visually aligned with combat.c.
  */
 #define PLAYER_ATTACK_RANGE 55.0f
-#define PLAYER_RADIUS 20.0f
 
 /*
  * ---------------------------------------------------------
@@ -68,22 +75,21 @@ static void Player_PushMoveEvent(
  * ---------------------------------------------------------
  */
 
-#define PLAYER_COLOR             (Color){45, 145, 245, 255}
-#define PLAYER_COLOR_LIGHT       (Color){95, 190, 255, 255}
-#define PLAYER_COLOR_DARK        (Color){20, 75, 155, 255}
+#define PLAYER_COLOR (Color){45, 145, 245, 255}
+#define PLAYER_COLOR_LIGHT (Color){95, 190, 255, 255}
+#define PLAYER_COLOR_DARK (Color){20, 75, 155, 255}
 
-#define PLAYER_OUTLINE           (Color){170, 225, 255, 255}
+#define PLAYER_OUTLINE (Color){170, 225, 255, 255}
 
-#define PLAYER_DODGE_COLOR       (Color){75, 215, 255, 255}
-#define PLAYER_DODGE_GLOW        (Color){75, 190, 255, 255}
+#define PLAYER_DODGE_COLOR (Color){75, 215, 255, 255}
+#define PLAYER_DODGE_GLOW (Color){75, 190, 255, 255}
 
-#define PLAYER_DAMAGE_COLOR      (Color){255, 65, 75, 255}
+#define PLAYER_DAMAGE_COLOR (Color){255, 65, 75, 255}
 
-#define PLAYER_ATTACK_COLOR      (Color){255, 155, 45, 255}
-#define PLAYER_ATTACK_GLOW       (Color){255, 205, 80, 255}
+#define PLAYER_ATTACK_COLOR (Color){255, 155, 45, 255}
+#define PLAYER_ATTACK_GLOW (Color){255, 205, 80, 255}
 
-#define PLAYER_SHADOW_COLOR      (Color){0, 0, 0, 90}
-
+#define PLAYER_SHADOW_COLOR (Color){0, 0, 0, 90}
 
 /*
  * =========================================================
@@ -141,20 +147,24 @@ void Player_Init(void)
      * a new dungeon run begins.
      */
     Inventory_Init(
-        &player.inventory
-    );
-}
+        &player.inventory);
 
+    /*
+     * Reset movement-event tracking so a restart
+     * or load starts clean.
+     */
+    move_event_timer = 0.0f;
+    last_event_move_x = MOVE_NONE;
+    last_event_move_y = MOVE_NONE;
+}
 
 void Player_SetPosition(
     float x,
-    float y
-)
+    float y)
 {
     player.x = x;
     player.y = y;
 }
-
 
 /*
  * =========================================================
@@ -175,6 +185,13 @@ void Player_Update(void)
 
     float dt =
         GetFrameTime();
+
+    /*
+     * Limit the time step so a frame hitch cannot
+     * move the player through walls.
+     */
+    if (dt > 0.033f)
+        dt = 0.033f;
 
     /*
      * -----------------------------------------------------
@@ -233,8 +250,7 @@ void Player_Update(void)
     float direction_length =
         sqrtf(
             direction_x * direction_x +
-            direction_y * direction_y
-        );
+            direction_y * direction_y);
 
     if (direction_length > 0.0f)
     {
@@ -294,8 +310,7 @@ void Player_Update(void)
         float dodge_length =
             sqrtf(
                 dodge_x * dodge_x +
-                dodge_y * dodge_y
-            );
+                dodge_y * dodge_y);
 
         if (dodge_length <= 0.0f)
         {
@@ -386,8 +401,7 @@ void Player_Update(void)
             player.y;
 
         Events_Push(
-            dodge_event
-        );
+            dodge_event);
     }
 
     /*
@@ -481,7 +495,7 @@ void Player_Update(void)
         }
     }
 
-        /*
+    /*
      * -----------------------------------------------------
      * Player Movement Events
      * -----------------------------------------------------
@@ -493,15 +507,46 @@ void Player_Update(void)
 
     if (!player.dodging)
     {
+        MoveDirection current_x = MOVE_NONE;
+        MoveDirection current_y = MOVE_NONE;
+
         if (direction_x < 0.0f)
-            Player_PushMoveEvent(MOVE_LEFT, direction_length);
+            current_x = MOVE_LEFT;
         else if (direction_x > 0.0f)
-            Player_PushMoveEvent(MOVE_RIGHT, direction_length);
+            current_x = MOVE_RIGHT;
 
         if (direction_y < 0.0f)
-            Player_PushMoveEvent(MOVE_UP, direction_length);
+            current_y = MOVE_UP;
         else if (direction_y > 0.0f)
-            Player_PushMoveEvent(MOVE_DOWN, direction_length);
+            current_y = MOVE_DOWN;
+
+        if (move_event_timer > 0.0f)
+            move_event_timer -= dt;
+
+        bool moving =
+            current_x != MOVE_NONE ||
+            current_y != MOVE_NONE;
+
+        bool direction_changed =
+            current_x != last_event_move_x ||
+            current_y != last_event_move_y;
+
+        if (moving &&
+            (direction_changed ||
+             move_event_timer <= 0.0f))
+        {
+            if (current_x != MOVE_NONE)
+                Player_PushMoveEvent(current_x, direction_length);
+
+            if (current_y != MOVE_NONE)
+                Player_PushMoveEvent(current_y, direction_length);
+
+            move_event_timer =
+                PLAYER_MOVE_EVENT_INTERVAL;
+        }
+
+        last_event_move_x = current_x;
+        last_event_move_y = current_y;
     }
 
     /*
@@ -530,8 +575,7 @@ void Player_Update(void)
         int potion_quantity =
             Inventory_GetQuantity(
                 &player.inventory,
-                ITEM_ID_HEALTH_POTION
-            );
+                ITEM_ID_HEALTH_POTION);
 
         if (potion_quantity > 0)
         {
@@ -553,8 +597,7 @@ void Player_Update(void)
                 Inventory_RemoveItem(
                     &player.inventory,
                     ITEM_ID_HEALTH_POTION,
-                    1
-                );
+                    1);
 
                 /*
                  * Record the healing event.
@@ -571,10 +614,8 @@ void Player_Update(void)
                     MOVE_NONE;
 
                 heal_event.value =
-                    (float)(
-                        player.health -
-                        old_health
-                    );
+                    (float)(player.health -
+                            old_health);
 
                 heal_event.x =
                     player.x;
@@ -583,8 +624,7 @@ void Player_Update(void)
                     player.y;
 
                 Events_Push(
-                    heal_event
-                );
+                    heal_event);
             }
         }
     }
@@ -626,8 +666,7 @@ void Player_Update(void)
             player.y;
 
         Events_Push(
-            attack_event
-        );
+            attack_event);
 
         /*
          * Play the attack sound only after the
@@ -638,7 +677,6 @@ void Player_Update(void)
         Combat_PlayerAttack();
     }
 }
-
 
 /*
  * =========================================================
@@ -670,9 +708,7 @@ void Player_Render(void)
             8.0f,
             Fade(
                 BLACK,
-                0.35f
-            )
-        );
+                0.35f));
 
         /*
          * Dead body.
@@ -681,8 +717,7 @@ void Player_Render(void)
             (int)player.x,
             (int)player.y,
             PLAYER_RADIUS,
-            (Color){55, 60, 70, 255}
-        );
+            (Color){55, 60, 70, 255});
 
         DrawCircleLines(
             (int)player.x,
@@ -690,9 +725,7 @@ void Player_Render(void)
             PLAYER_RADIUS + 1.5f,
             Fade(
                 WHITE,
-                0.35f
-            )
-        );
+                0.35f));
 
         /*
          * Red death ring.
@@ -703,9 +736,7 @@ void Player_Render(void)
             PLAYER_RADIUS + 5.0f,
             Fade(
                 RED,
-                0.65f
-            )
-        );
+                0.65f));
 
         /*
          * Red X communicates the dead state.
@@ -713,36 +744,29 @@ void Player_Render(void)
         DrawLineEx(
             (Vector2){
                 player.x - 9.0f,
-                player.y - 9.0f
-            },
+                player.y - 9.0f},
             (Vector2){
                 player.x + 9.0f,
-                player.y + 9.0f
-            },
+                player.y + 9.0f},
             3.0f,
-            RED
-        );
+            RED);
 
         DrawLineEx(
             (Vector2){
                 player.x + 9.0f,
-                player.y - 9.0f
-            },
+                player.y - 9.0f},
             (Vector2){
                 player.x - 9.0f,
-                player.y + 9.0f
-            },
+                player.y + 9.0f},
             3.0f,
-            RED
-        );
+            RED);
 
         DrawText(
             "DEAD",
             (int)player.x - 18,
             (int)player.y - 38,
             14,
-            RED
-        );
+            RED);
 
         return;
     }
@@ -760,8 +784,7 @@ void Player_Render(void)
         (int)player.y + 13,
         24.0f,
         8.0f,
-        PLAYER_SHADOW_COLOR
-    );
+        PLAYER_SHADOW_COLOR);
 
     /*
      * -----------------------------------------------------
@@ -775,10 +798,8 @@ void Player_Render(void)
     {
         float dodge_progress =
             1.0f -
-            (
-                player.dodge_timer /
-                PLAYER_DODGE_DURATION
-            );
+            (player.dodge_timer /
+             PLAYER_DODGE_DURATION);
 
         if (dodge_progress < 0.0f)
             dodge_progress = 0.0f;
@@ -796,12 +817,12 @@ void Player_Render(void)
         float trail_x =
             player.x -
             player.last_move_x *
-            trail_length;
+                trail_length;
 
         float trail_y =
             player.y -
             player.last_move_y *
-            trail_length;
+                trail_length;
 
         /*
          * Outer glow.
@@ -809,18 +830,14 @@ void Player_Render(void)
         DrawLineEx(
             (Vector2){
                 trail_x,
-                trail_y
-            },
+                trail_y},
             (Vector2){
                 player.x,
-                player.y
-            },
+                player.y},
             12.0f,
             Fade(
                 PLAYER_DODGE_GLOW,
-                0.18f
-            )
-        );
+                0.18f));
 
         /*
          * Main trail.
@@ -828,18 +845,14 @@ void Player_Render(void)
         DrawLineEx(
             (Vector2){
                 trail_x,
-                trail_y
-            },
+                trail_y},
             (Vector2){
                 player.x,
-                player.y
-            },
+                player.y},
             5.0f,
             Fade(
                 PLAYER_DODGE_COLOR,
-                0.50f
-            )
-        );
+                0.50f));
 
         /*
          * Dodge ring.
@@ -855,9 +868,7 @@ void Player_Render(void)
             ring_radius,
             Fade(
                 PLAYER_DODGE_COLOR,
-                0.85f
-            )
-        );
+                0.85f));
 
         /*
          * Secondary ring.
@@ -868,9 +879,7 @@ void Player_Render(void)
             ring_radius + 5.0f,
             Fade(
                 PLAYER_DODGE_COLOR,
-                0.30f
-            )
-        );
+                0.30f));
     }
 
     /*
@@ -888,10 +897,8 @@ void Player_Render(void)
     if (player.damage_timer > 0.0f)
     {
         int flash_phase =
-            (int)(
-                player.damage_timer *
-                18.0f
-            );
+            (int)(player.damage_timer *
+                  18.0f);
 
         if ((flash_phase % 2) == 0)
         {
@@ -926,9 +933,7 @@ void Player_Render(void)
         PLAYER_RADIUS + 5.0f,
         Fade(
             player_color,
-            0.10f
-        )
-    );
+            0.10f));
 
     /*
      * -----------------------------------------------------
@@ -940,8 +945,7 @@ void Player_Render(void)
         (int)player.x,
         (int)player.y,
         PLAYER_RADIUS + 1.5f,
-        PLAYER_OUTLINE
-    );
+        PLAYER_OUTLINE);
 
     /*
      * Main body.
@@ -950,8 +954,7 @@ void Player_Render(void)
         (int)player.x,
         (int)player.y,
         PLAYER_RADIUS,
-        player_color
-    );
+        player_color);
 
     /*
      * Lower dark shading.
@@ -959,17 +962,14 @@ void Player_Render(void)
     DrawCircleSector(
         (Vector2){
             player.x,
-            player.y
-        },
+            player.y},
         PLAYER_RADIUS - 1.0f,
         20.0f,
         160.0f,
         20,
         Fade(
             PLAYER_COLOR_DARK,
-            0.55f
-        )
-    );
+            0.55f));
 
     /*
      * -----------------------------------------------------
@@ -983,16 +983,13 @@ void Player_Render(void)
         5.0f,
         Fade(
             WHITE,
-            0.38f
-        )
-    );
+            0.38f));
 
     DrawCircle(
         (int)player.x - 8,
         (int)player.y - 9,
         2.0f,
-        WHITE
-    );
+        WHITE);
 
     /*
      * -----------------------------------------------------
@@ -1008,18 +1005,14 @@ void Player_Render(void)
     DrawLineEx(
         (Vector2){
             player.x + 12.0f,
-            player.y
-        },
+            player.y},
         (Vector2){
             player.x + 19.0f,
-            player.y
-        },
+            player.y},
         5.0f,
         Fade(
             BLACK,
-            0.35f
-        )
-    );
+            0.35f));
 
     /*
      * Bright direction marker.
@@ -1028,8 +1021,7 @@ void Player_Render(void)
         (int)player.x + 11,
         (int)player.y,
         4.5f,
-        PLAYER_COLOR_LIGHT
-    );
+        PLAYER_COLOR_LIGHT);
 
     /*
      * Tiny weapon-direction tip.
@@ -1037,18 +1029,14 @@ void Player_Render(void)
     DrawTriangle(
         (Vector2){
             player.x + 18.0f,
-            player.y
-        },
+            player.y},
         (Vector2){
             player.x + 13.0f,
-            player.y - 3.5f
-        },
+            player.y - 3.5f},
         (Vector2){
             player.x + 13.0f,
-            player.y + 3.5f
-        },
-        WHITE
-    );
+            player.y + 3.5f},
+        WHITE);
 
     /*
      * -----------------------------------------------------
@@ -1077,9 +1065,7 @@ void Player_Render(void)
                 (1.0f - damage_progress) * 4.0f,
             Fade(
                 PLAYER_DAMAGE_COLOR,
-                0.85f
-            )
-        );
+                0.85f));
     }
 
     /*
@@ -1101,16 +1087,11 @@ void Player_Render(void)
     {
         float attack_progress =
             1.0f -
-            (
-                (
-                    player.attack_timer -
-                    (
-                        player.attack_cooldown -
-                        0.12f
-                    )
-                ) /
-                0.12f
-            );
+            ((
+                 player.attack_timer -
+                 (player.attack_cooldown -
+                  0.12f)) /
+             0.12f);
 
         if (attack_progress < 0.0f)
             attack_progress = 0.0f;
@@ -1134,9 +1115,7 @@ void Player_Render(void)
             glow_radius * 0.55f,
             Fade(
                 PLAYER_ATTACK_GLOW,
-                0.10f
-            )
-        );
+                0.10f));
 
         /*
          * -------------------------------------------------
@@ -1158,8 +1137,7 @@ void Player_Render(void)
         DrawRing(
             (Vector2){
                 player.x,
-                player.y
-            },
+                player.y},
             inner_radius - 2.0f,
             outer_radius + 3.0f,
             300.0f,
@@ -1167,9 +1145,7 @@ void Player_Render(void)
             18,
             Fade(
                 PLAYER_ATTACK_GLOW,
-                0.25f
-            )
-        );
+                0.25f));
 
         /*
          * Main orange attack arc.
@@ -1177,8 +1153,7 @@ void Player_Render(void)
         DrawRing(
             (Vector2){
                 player.x,
-                player.y
-            },
+                player.y},
             inner_radius,
             outer_radius,
             300.0f,
@@ -1186,9 +1161,7 @@ void Player_Render(void)
             18,
             Fade(
                 PLAYER_ATTACK_COLOR,
-                0.92f
-            )
-        );
+                0.92f));
 
         /*
          * Bright inner edge.
@@ -1196,8 +1169,7 @@ void Player_Render(void)
         DrawRing(
             (Vector2){
                 player.x,
-                player.y
-            },
+                player.y},
             inner_radius + 1.0f,
             inner_radius + 3.0f,
             300.0f,
@@ -1205,9 +1177,7 @@ void Player_Render(void)
             18,
             Fade(
                 YELLOW,
-                0.90f
-            )
-        );
+                0.90f));
 
         /*
          * -------------------------------------------------
@@ -1225,15 +1195,12 @@ void Player_Render(void)
         DrawLineEx(
             (Vector2){
                 player.x + 16.0f,
-                player.y - 13.0f
-            },
+                player.y - 13.0f},
             (Vector2){
                 player.x + slash_length,
-                player.y - 3.0f
-            },
+                player.y - 3.0f},
             7.0f,
-            WHITE
-        );
+            WHITE);
 
         /*
          * Orange secondary edge.
@@ -1241,15 +1208,12 @@ void Player_Render(void)
         DrawLineEx(
             (Vector2){
                 player.x + 19.0f,
-                player.y + 7.0f
-            },
+                player.y + 7.0f},
             (Vector2){
                 player.x + slash_length - 2.0f,
-                player.y + 13.0f
-            },
+                player.y + 13.0f},
             4.0f,
-            PLAYER_ATTACK_COLOR
-        );
+            PLAYER_ATTACK_COLOR);
 
         /*
          * -------------------------------------------------
@@ -1270,23 +1234,19 @@ void Player_Render(void)
             8.0f,
             Fade(
                 YELLOW,
-                0.20f
-            )
-        );
+                0.20f));
 
         DrawCircle(
             impact_x,
             impact_y,
             5.0f,
-            YELLOW
-        );
+            YELLOW);
 
         DrawCircle(
             impact_x - 1,
             impact_y - 1,
             2.0f,
-            WHITE
-        );
+            WHITE);
 
         /*
          * Small spark.
@@ -1295,18 +1255,15 @@ void Player_Render(void)
             impact_x - 5,
             impact_y - 8,
             2.5f,
-            WHITE
-        );
+            WHITE);
 
         DrawCircle(
             impact_x + 3,
             impact_y + 7,
             2.0f,
-            PLAYER_ATTACK_GLOW
-        );
+            PLAYER_ATTACK_GLOW);
     }
 }
-
 
 /*
  * =========================================================
@@ -1318,7 +1275,6 @@ Player *Player_Get(void)
 {
     return &player;
 }
-
 
 /*
  * =========================================================
@@ -1384,8 +1340,7 @@ void Player_TakeDamage(int damage)
         player.y;
 
     Events_Push(
-        damage_event
-    );
+        damage_event);
 
     /*
      * Player has died.
@@ -1408,7 +1363,6 @@ void Player_TakeDamage(int damage)
      */
     player.damage_timer = 0.75f;
 }
-
 
 bool Player_IsDead(void)
 {

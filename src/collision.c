@@ -9,8 +9,7 @@
 static float ClampFloat(
     float value,
     float min,
-    float max
-)
+    float max)
 {
     if (value < min)
         return min;
@@ -21,12 +20,10 @@ static float ClampFloat(
     return value;
 }
 
-
 bool Collision_CanMove(
     float x,
     float y,
-    float radius
-)
+    float radius)
 {
     /*
      * Determine which tiles can possibly
@@ -75,15 +72,13 @@ bool Collision_CanMove(
                 ClampFloat(
                     x,
                     wall_left,
-                    wall_right
-                );
+                    wall_right);
 
             float closest_y =
                 ClampFloat(
                     y,
                     wall_top,
-                    wall_bottom
-                );
+                    wall_bottom);
 
             float dx =
                 x - closest_x;
@@ -105,7 +100,6 @@ bool Collision_CanMove(
     return true;
 }
 
-
 /*
  * -------------------------------------------------
  * Check whether a proposed position is moving
@@ -126,8 +120,7 @@ static bool IsMovingAway(
     float proposed_x,
     float proposed_y,
     float other_x,
-    float other_y
-)
+    float other_y)
 {
     float current_dx =
         current_x - other_x;
@@ -153,12 +146,10 @@ static bool IsMovingAway(
            current_distance_squared;
 }
 
-
 bool Collision_PlayerCanMove(
     float x,
     float y,
-    float radius
-)
+    float radius)
 {
     /*
      * Check walls first.
@@ -245,13 +236,11 @@ bool Collision_PlayerCanMove(
     return true;
 }
 
-
 bool Collision_EnemyCanMove(
     int enemy_index,
     float x,
     float y,
-    float radius
-)
+    float radius)
 {
     /*
      * -------------------------------------------------
@@ -265,7 +254,6 @@ bool Collision_EnemyCanMove(
     {
         return false;
     }
-
 
     /*
      * -------------------------------------------------
@@ -285,7 +273,7 @@ bool Collision_EnemyCanMove(
             y - player->y;
 
         float minimum_distance =
-            radius + 20.0f;
+            radius + PLAYER_RADIUS;
 
         float minimum_distance_squared =
             minimum_distance *
@@ -330,7 +318,6 @@ bool Collision_EnemyCanMove(
             }
         }
     }
-
 
     /*
      * -------------------------------------------------
@@ -394,7 +381,7 @@ bool Collision_EnemyCanMove(
 
         if (distance_squared <
             minimum_distance *
-            minimum_distance)
+                minimum_distance)
         {
             Enemy *enemy =
                 Enemy_Get(enemy_index);
@@ -423,13 +410,11 @@ bool Collision_EnemyCanMove(
     return true;
 }
 
-
 bool Collision_HasLineOfSight(
     float x1,
     float y1,
     float x2,
-    float y2
-)
+    float y2)
 {
     float dx =
         x2 - x1;
@@ -440,8 +425,7 @@ bool Collision_HasLineOfSight(
     float distance =
         sqrtf(
             dx * dx +
-            dy * dy
-        );
+            dy * dy);
 
     if (distance <= 0.0f)
         return true;
@@ -468,13 +452,11 @@ bool Collision_HasLineOfSight(
 
         int tile_x =
             (int)floorf(
-                x / TILE_SIZE
-            );
+                x / TILE_SIZE);
 
         int tile_y =
             (int)floorf(
-                y / TILE_SIZE
-            );
+                y / TILE_SIZE);
 
         if (TileMap_GetTile(
                 tile_x,
@@ -486,7 +468,6 @@ bool Collision_HasLineOfSight(
 
     return true;
 }
-
 
 void Collision_SeparateEnemies(void)
 {
@@ -580,8 +561,7 @@ void Collision_SeparateEnemies(void)
                 {
                     distance =
                         sqrtf(
-                            distance_squared
-                        );
+                            distance_squared);
                 }
 
                 float overlap =
@@ -593,7 +573,6 @@ void Collision_SeparateEnemies(void)
 
                 float normal_y =
                     dy / distance;
-
 
                 /*
                  * -------------------------------------------------
@@ -611,12 +590,11 @@ void Collision_SeparateEnemies(void)
                 bool separated = false;
 
                 const float push_factors[] =
-                {
-                    0.25f,
-                    0.50f,
-                    0.75f,
-                    1.00f
-                };
+                    {
+                        0.25f,
+                        0.50f,
+                        0.75f,
+                        1.00f};
 
                 const int push_count =
                     sizeof(push_factors) /
@@ -633,12 +611,12 @@ void Collision_SeparateEnemies(void)
                     float new_bx =
                         b->x +
                         normal_x *
-                        push;
+                            push;
 
                     float new_by =
                         b->y +
                         normal_y *
-                        push;
+                            push;
 
                     if (Collision_EnemyCanMove(
                             j,
@@ -658,10 +636,8 @@ void Collision_SeparateEnemies(void)
                     }
                 }
 
-
                 if (separated)
                     continue;
-
 
                 /*
                  * -------------------------------------------------
@@ -681,12 +657,12 @@ void Collision_SeparateEnemies(void)
                     float new_ax =
                         a->x -
                         normal_x *
-                        push;
+                            push;
 
                     float new_ay =
                         a->y -
                         normal_y *
-                        push;
+                            push;
 
                     if (Collision_EnemyCanMove(
                             i,
@@ -705,7 +681,6 @@ void Collision_SeparateEnemies(void)
                         break;
                     }
                 }
-
 
                 /*
                  * If neither enemy can move, leave the

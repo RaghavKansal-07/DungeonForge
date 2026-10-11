@@ -846,23 +846,6 @@ static bool Enemy_GetAdaptiveTarget(
     }
 }
 
-static bool Enemy_ShouldAdaptAttack(
-    const Enemy *enemy)
-{
-    if (enemy->adaptation_level <= 0.0f)
-        return false;
-
-    if (enemy->adaptive_decision ==
-            ADAPTIVE_DECISION_ATTACK_AGGRESSIVE ||
-        enemy->adaptive_decision ==
-            ADAPTIVE_DECISION_ATTACK_DEFENSIVE)
-    {
-        return true;
-    }
-
-    return false;
-}
-
 /*
  * ---------------------------------------------------------
  * Boss AI
@@ -2729,6 +2712,25 @@ static void BossFSM_Update(
     }
 }
 
+void EnemyFSM_Reset(void)
+{
+    for (int i = 0;
+         i < MAX_ENEMIES;
+         i++)
+    {
+        stuck_timers[i] = 0.0f;
+
+        chase_modes[i] =
+            ENEMY_CHASE_DIRECT;
+
+        boss_previous_target_distance[i] = 0.0f;
+
+        steering_direction_x[i] = 0.0f;
+        steering_direction_y[i] = 0.0f;
+        steering_memory_timer[i] = 0.0f;
+    }
+}
+
 void EnemyFSM_Update(
     int index)
 {
@@ -3174,37 +3176,26 @@ void EnemyFSM_Update(
         if (enemy->attack_timer <=
             0.0f)
         {
-            if (Enemy_ShouldAdaptAttack(
-                    enemy))
-            {
-                if (enemy->adaptive_decision ==
+            /*
+             * An aggressive Guardian attacks faster.
+             * The defensive stance is handled in
+             * Enemy_TakeDamage (damage reduction).
+             */
+            float cooldown_scale = 1.0f;
+
+            if (enemy->adaptation_level > 0.0f &&
+                enemy->adaptive_decision ==
                     ADAPTIVE_DECISION_ATTACK_AGGRESSIVE)
-                {
-                    Player_TakeDamage(
-                        ENEMY_ATTACK_DAMAGE);
-
-                    enemy->attack_timer =
-                        enemy->attack_cooldown *
-                        0.70f;
-                }
-                else
-                {
-                    Player_TakeDamage(
-                        ENEMY_ATTACK_DAMAGE);
-
-                    enemy->attack_timer =
-                        enemy->attack_cooldown *
-                        1.25f;
-                }
-            }
-            else
             {
-                Player_TakeDamage(
-                    ENEMY_ATTACK_DAMAGE);
-
-                enemy->attack_timer =
-                    enemy->attack_cooldown;
+                cooldown_scale = 0.70f;
             }
+
+            Player_TakeDamage(
+                ENEMY_ATTACK_DAMAGE);
+
+            enemy->attack_timer =
+                enemy->attack_cooldown *
+                cooldown_scale;
         }
 
         break;

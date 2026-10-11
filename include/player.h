@@ -5,6 +5,8 @@
 
 #include "inventory.h"
 
+#define PLAYER_MAX_HEALTH 100
+#define PLAYER_RADIUS 20.0f
 
 typedef struct
 {

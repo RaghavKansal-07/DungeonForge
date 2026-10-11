@@ -13,6 +13,9 @@
 
 static Enemy enemies[MAX_ENEMIES];
 
+#define NORMAL_ENEMY_RADIUS 20.0f
+#define BOSS_RADIUS 28.0f
+
 static bool debug_enabled = true;
 
 /*
@@ -62,7 +65,7 @@ static void Enemy_Create(
     enemies[index].max_health = 100;
     enemies[index].health = 100;
 
-    enemies[index].radius = 20.0f;
+    enemies[index].radius = NORMAL_ENEMY_RADIUS;
 
     enemies[index].state =
         ENEMY_STATE_IDLE;
@@ -222,7 +225,7 @@ static void Enemy_ConfigureBoss(
         500;
 
     enemies[index].radius =
-        28.0f;
+        BOSS_RADIUS;
 
     /*
      * Boss attack.
@@ -286,6 +289,7 @@ static bool Enemy_FindFloorPosition(
     float avoid_x,
     float avoid_y,
     float minimum_distance,
+    float radius,
     float *result_x,
     float *result_y)
 {
@@ -387,7 +391,7 @@ static bool Enemy_FindFloorPosition(
             if (!Collision_CanMove(
                     world_x,
                     world_y,
-                    20.0f))
+                    radius))
             {
                 continue;
             }
@@ -410,6 +414,9 @@ static bool Enemy_FindFloorPosition(
 
 void Enemy_Init(void)
 {
+
+    EnemyFSM_Reset();
+
     /*
      * First deactivate every enemy slot.
      */
@@ -462,6 +469,7 @@ void Enemy_Init(void)
             player_x,
             player_y,
             250.0f,
+            NORMAL_ENEMY_RADIUS,
             &spawn_x,
             &spawn_y))
     {
@@ -489,6 +497,7 @@ void Enemy_Init(void)
             enemy0_x,
             enemy0_y,
             200.0f,
+            NORMAL_ENEMY_RADIUS,
             &spawn_x,
             &spawn_y))
     {
@@ -516,6 +525,7 @@ void Enemy_Init(void)
             enemy1_x,
             enemy1_y,
             200.0f,
+            NORMAL_ENEMY_RADIUS,
             &spawn_x,
             &spawn_y))
     {
@@ -549,6 +559,7 @@ void Enemy_Init(void)
             boss_avoid_x,
             boss_avoid_y,
             350.0f,
+            BOSS_RADIUS,
             &spawn_x,
             &spawn_y))
     {
@@ -2025,6 +2036,21 @@ void Enemy_TakeDamage(
     }
 
     /*
+     * A Guardian in its defensive stance blocks part
+     * of the damage.
+     */
+    if (enemy->adaptive_type ==
+            ADAPTIVE_AI_GUARDIAN &&
+        enemy->adaptive_decision ==
+            ADAPTIVE_DECISION_ATTACK_DEFENSIVE)
+    {
+        damage = (damage * 6) / 10;
+
+        if (damage < 1)
+            damage = 1;
+    }
+
+    /*
      * Apply damage.
      */
     enemy->health -= damage;
@@ -2091,11 +2117,23 @@ void Enemy_TakeDamage(
     }
 
     /*
-     * Enemy survives and enters HURT.
+     * The hurt timer drives the white hit flash for
+     * every enemy.
      */
     enemy->hurt_timer =
         0.15f;
 
+    /*
+     * The boss is stagger-resistant. It flashes when hit
+     * but keeps its current state, so its attacks and
+     * special cannot be cancelled by rapid hits.
+     */
+    if (enemy->is_boss)
+        return;
+
+    /*
+     * Normal enemies flinch.
+     */
     enemy->state =
         ENEMY_STATE_HURT;
 }
