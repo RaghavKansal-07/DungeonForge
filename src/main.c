@@ -5,7 +5,7 @@ int main(void)
 {
     Game_Init();
 
-    while (!WindowShouldClose())
+    while (!WindowShouldClose() && !Game_ShouldQuit())
     {
         Game_Update();
         Game_Render();
