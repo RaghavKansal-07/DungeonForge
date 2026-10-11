@@ -3,6 +3,7 @@
 #include "player.h"
 #include "raylib.h"
 #include "audio.h"
+#include "ui.h"
 
 #include <math.h>
 
@@ -176,7 +177,7 @@ void ItemDrop_Render(void)
             item_color
         );
 
-        DrawText(
+        UI_Text(
             definition->name,
             (int)item_drops[i].x + 12,
             (int)item_drops[i].y - 7,

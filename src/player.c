@@ -6,6 +6,8 @@
 #include "items.h"
 #include "events.h"
 #include "audio.h"
+#include "ui.h"
+#include "effects.h"
 
 #include <math.h>
 
@@ -20,6 +22,11 @@ static Player player;
 static float move_event_timer = 0.0f;
 static MoveDirection last_event_move_x = MOVE_NONE;
 static MoveDirection last_event_move_y = MOVE_NONE;
+
+/*
+ * Brief pulse shown when the dodge becomes ready again.
+ */
+static float dodge_ready_flash = 0.0f;
 
 static void Player_PushMoveEvent(
     MoveDirection direction,
@@ -154,6 +161,7 @@ void Player_Init(void)
      * or load starts clean.
      */
     move_event_timer = 0.0f;
+    dodge_ready_flash = 0.0f;
     last_event_move_x = MOVE_NONE;
     last_event_move_y = MOVE_NONE;
 }
@@ -211,9 +219,15 @@ void Player_Update(void)
     {
         player.dodge_cooldown_timer -= dt;
 
-        if (player.dodge_cooldown_timer < 0.0f)
+        if (player.dodge_cooldown_timer <= 0.0f)
+        {
             player.dodge_cooldown_timer = 0.0f;
+            dodge_ready_flash = 0.30f;
+        }
     }
+
+    if (dodge_ready_flash > 0.0f)
+        dodge_ready_flash -= dt;
 
     if (player.dodge_invulnerability_timer > 0.0f)
     {
@@ -625,6 +639,13 @@ void Player_Update(void)
 
                 Events_Push(
                     heal_event);
+
+                Effects_SpawnNumber(
+                    player.x,
+                    player.y - PLAYER_RADIUS - 28.0f,
+                    player.health - old_health,
+                    '+',
+                    (Color){90, 235, 120, 255});
             }
         }
     }
@@ -761,7 +782,7 @@ void Player_Render(void)
             3.0f,
             RED);
 
-        DrawText(
+        UI_Text(
             "DEAD",
             (int)player.x - 18,
             (int)player.y - 38,
@@ -1070,6 +1091,62 @@ void Player_Render(void)
 
     /*
      * -----------------------------------------------------
+     * Dodge Cooldown Ring
+     * -----------------------------------------------------
+     */
+    {
+        Vector2 ring_center = {player.x, player.y};
+
+        float ring_inner = PLAYER_RADIUS + 8.0f;
+        float ring_outer = ring_inner + 2.5f;
+
+        if (player.dodge_cooldown_timer > 0.0f &&
+            !player.dodging)
+        {
+            float progress =
+                1.0f -
+                player.dodge_cooldown_timer /
+                    PLAYER_DODGE_COOLDOWN;
+
+            if (progress < 0.0f)
+                progress = 0.0f;
+
+            if (progress > 1.0f)
+                progress = 1.0f;
+
+            DrawRing(
+                ring_center,
+                ring_inner,
+                ring_outer,
+                0.0f,
+                360.0f,
+                36,
+                Fade(BLACK, 0.35f));
+
+            DrawRing(
+                ring_center,
+                ring_inner,
+                ring_outer,
+                -90.0f,
+                -90.0f + 360.0f * progress,
+                36,
+                Fade(PLAYER_DODGE_COLOR, 0.80f));
+        }
+        else if (dodge_ready_flash > 0.0f)
+        {
+            float t =
+                1.0f - dodge_ready_flash / 0.30f;
+
+            DrawCircleLines(
+                (int)player.x,
+                (int)player.y,
+                ring_inner + t * 10.0f,
+                Fade(PLAYER_DODGE_COLOR, 1.0f - t));
+        }
+    }
+
+    /*
+     * -----------------------------------------------------
      * Melee Attack Visual
      * -----------------------------------------------------
      *
@@ -1315,6 +1392,15 @@ void Player_TakeDamage(int damage)
      * actually been applied.
      */
     Audio_PlayPlayerDamage();
+
+    Effects_SpawnNumber(
+        player.x,
+        player.y - PLAYER_RADIUS - 28.0f,
+        damage,
+        '-',
+        (Color){255, 90, 90, 255});
+
+    Effects_AddShake((float)damage * 0.5f);
 
     /*
      * Record damage received.
