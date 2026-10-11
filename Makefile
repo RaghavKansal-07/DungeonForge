@@ -30,7 +30,11 @@ SRC = src/main.c \
       src/adaptive_ai.c \
       src/serialization.c \
       src/save.c \
-      src/audio.c
+      src/audio.c \
+      src/ui.c \
+      src/effects.c \
+      src/lighting.c \
+      src/minimap.c
 
 
 # ---------------------------------------------------------
