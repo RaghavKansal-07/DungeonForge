@@ -16,6 +16,9 @@ static Enemy enemies[MAX_ENEMIES];
 #define NORMAL_ENEMY_RADIUS 20.0f
 #define BOSS_RADIUS 28.0f
 
+#define ENEMY_SPAWN_PLAYER_SAFE_DISTANCE 320.0f
+#define ENEMY_SPAWN_PLAYER_MIN_DISTANCE 160.0f
+
 static bool debug_enabled = true;
 
 /*
@@ -299,107 +302,136 @@ static bool Enemy_FindFloorPosition(
         return false;
     }
 
+    Player *player =
+        Player_Get();
+
     float minimum_distance_squared =
         minimum_distance *
         minimum_distance;
 
     /*
-     * Scan the generated tile map.
+     * Enemies must never spawn near the player.
+     *
+     * First try a comfortable distance (farther than the
+     * enemy detection range). If the map has no such
+     * spot, relax it once rather than failing to spawn.
      */
-    for (int y = 0;
-         y < MAP_HEIGHT;
-         y++)
-    {
-        for (int x = 0;
-             x < MAP_WIDTH;
-             x++)
+    const float player_distances[] =
         {
-            if (TileMap_GetTile(
-                    x,
-                    y) != TILE_FLOOR)
+            ENEMY_SPAWN_PLAYER_SAFE_DISTANCE,
+            ENEMY_SPAWN_PLAYER_MIN_DISTANCE};
+
+    for (int pass = 0;
+         pass < 2;
+         pass++)
+    {
+        float player_distance_squared =
+            player_distances[pass] *
+            player_distances[pass];
+
+        for (int y = 0;
+             y < MAP_HEIGHT;
+             y++)
+        {
+            for (int x = 0;
+                 x < MAP_WIDTH;
+                 x++)
             {
-                continue;
-            }
-
-            float world_x =
-                x * TILE_SIZE +
-                TILE_SIZE * 0.5f;
-
-            float world_y =
-                y * TILE_SIZE +
-                TILE_SIZE * 0.5f;
-
-            /*
-             * Check the explicitly supplied position.
-             */
-            float dx =
-                world_x - avoid_x;
-
-            float dy =
-                world_y - avoid_y;
-
-            float distance_squared =
-                dx * dx + dy * dy;
-
-            if (distance_squared <
-                minimum_distance_squared)
-            {
-                continue;
-            }
-
-            /*
-             * Also check every enemy already spawned.
-             */
-            bool too_close_to_enemy = false;
-
-            for (int i = 0;
-                 i < MAX_ENEMIES;
-                 i++)
-            {
-                if (!enemies[i].active)
+                if (TileMap_GetTile(
+                        x,
+                        y) != TILE_FLOOR)
+                {
                     continue;
+                }
 
-                float enemy_dx =
-                    world_x -
-                    enemies[i].x;
+                float world_x =
+                    x * TILE_SIZE +
+                    TILE_SIZE * 0.5f;
 
-                float enemy_dy =
-                    world_y -
-                    enemies[i].y;
+                float world_y =
+                    y * TILE_SIZE +
+                    TILE_SIZE * 0.5f;
 
-                float enemy_distance_squared =
-                    enemy_dx * enemy_dx +
-                    enemy_dy * enemy_dy;
+                /*
+                 * Distance from the supplied position.
+                 */
+                float dx =
+                    world_x - avoid_x;
 
-                if (enemy_distance_squared <
+                float dy =
+                    world_y - avoid_y;
+
+                if (dx * dx + dy * dy <
                     minimum_distance_squared)
                 {
-                    too_close_to_enemy = true;
-                    break;
+                    continue;
                 }
+
+                /*
+                 * Distance from the player.
+                 */
+                if (player != NULL)
+                {
+                    float player_dx =
+                        world_x - player->x;
+
+                    float player_dy =
+                        world_y - player->y;
+
+                    if (player_dx * player_dx +
+                            player_dy * player_dy <
+                        player_distance_squared)
+                    {
+                        continue;
+                    }
+                }
+
+                /*
+                 * Distance from every enemy already spawned.
+                 */
+                bool too_close_to_enemy = false;
+
+                for (int i = 0;
+                     i < MAX_ENEMIES;
+                     i++)
+                {
+                    if (!enemies[i].active)
+                        continue;
+
+                    float enemy_dx =
+                        world_x - enemies[i].x;
+
+                    float enemy_dy =
+                        world_y - enemies[i].y;
+
+                    if (enemy_dx * enemy_dx +
+                            enemy_dy * enemy_dy <
+                        minimum_distance_squared)
+                    {
+                        too_close_to_enemy = true;
+                        break;
+                    }
+                }
+
+                if (too_close_to_enemy)
+                    continue;
+
+                /*
+                 * The complete enemy circle must fit.
+                 */
+                if (!Collision_CanMove(
+                        world_x,
+                        world_y,
+                        radius))
+                {
+                    continue;
+                }
+
+                *result_x = world_x;
+                *result_y = world_y;
+
+                return true;
             }
-
-            if (too_close_to_enemy)
-            {
-                continue;
-            }
-
-            /*
-             * Make sure the complete enemy circle
-             * is inside a walkable location.
-             */
-            if (!Collision_CanMove(
-                    world_x,
-                    world_y,
-                    radius))
-            {
-                continue;
-            }
-
-            *result_x = world_x;
-            *result_y = world_y;
-
-            return true;
         }
     }
 

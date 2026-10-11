@@ -88,6 +88,21 @@ bool Audio_Init(void)
     player_damage_sound =
         LoadSound("assets/audio/player_damage.ogg");
 
+    enemy_hit_sound =
+        LoadSound("assets/audio/enemy_hit.ogg");
+
+    enemy_death_sound =
+        LoadSound("assets/audio/enemy_death.ogg");
+
+    item_pickup_sound =
+        LoadSound("assets/audio/item_pickup.ogg");
+
+    boss_attack_sound =
+        LoadSound("assets/audio/boss_attack.ogg");
+
+    boss_phase_sound =
+        LoadSound("assets/audio/boss_phase.ogg");
+
     bool all_loaded =
         IsSoundValid(player_attack_sound) &&
         IsSoundValid(player_damage_sound) &&
@@ -103,21 +118,6 @@ bool Audio_Init(void)
             LOG_WARNING,
             "One or more audio files failed to load");
     }
-
-    enemy_hit_sound =
-        LoadSound("assets/audio/enemy_hit.ogg");
-
-    enemy_death_sound =
-        LoadSound("assets/audio/enemy_death.ogg");
-
-    item_pickup_sound =
-        LoadSound("assets/audio/item_pickup.ogg");
-
-    boss_attack_sound =
-        LoadSound("assets/audio/boss_attack.ogg");
-
-    boss_phase_sound =
-        LoadSound("assets/audio/boss_phase.ogg");
 
     audio_initialized = true;
 
