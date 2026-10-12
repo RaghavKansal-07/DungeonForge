@@ -20,7 +20,23 @@ void EnemyFSM_Reset(void);
 bool EnemyFSM_GetAdaptiveCue(
     Enemy *enemy,
     float *target_x,
-    float *target_y
-);
+    float *target_y);
+
+/*
+ * Is this enemy winding up an attack?
+ *
+ * Returns true while a wind-up is running, and writes how far
+ * along it is (0.0 to 1.0) into progress.
+ */
+bool EnemyFSM_GetWindup(
+    int index,
+    float *progress);
+
+/*
+ * Radius around the enemy that its current attack will hit.
+ * Used to draw the warning, so the warning is the real zone.
+ */
+float EnemyFSM_GetWindupRadius(
+    const Enemy *enemy);
 
 #endif

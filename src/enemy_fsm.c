@@ -6,6 +6,8 @@
 #include "raylib.h"
 #include "audio.h"
 #include "effects.h"
+#include "windup.h"
+#include "balance.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -14,8 +16,11 @@
 #define ENEMY_DETECTION_RANGE 250.0f
 #define ENEMY_LOSE_RANGE 350.0f
 
-#define ENEMY_ATTACK_RANGE 50.0f
-#define ENEMY_ATTACK_DAMAGE 10
+/* All combat numbers live in balance.h. */
+#define ENEMY_ATTACK_RANGE BAL_ENEMY_ATTACK_RANGE
+
+/* How much farther than its range an attack can still connect. */
+#define ENEMY_HIT_TOLERANCE BAL_ENEMY_HIT_TOLERANCE
 
 #define ENEMY_PATH_UPDATE_TIME 0.20f
 #define ENEMY_AWARENESS_TIME 1.50f
@@ -38,17 +43,20 @@
  * ---------------------------------------------------------
  */
 
+#define BOSS_MELEE_WINDUP_TIME BAL_BOSS_MELEE_WINDUP
+#define BOSS_SPECIAL_WINDUP_TIME BAL_BOSS_SPECIAL_WINDUP
+
 #define BOSS_DETECTION_RANGE 400.0f
 #define BOSS_LOSE_RANGE 550.0f
 
-#define BOSS_ATTACK_RANGE 60.0f
-#define BOSS_ATTACK_EXIT_RANGE 72.0f
-#define BOSS_ATTACK_DAMAGE 15
+#define BOSS_ATTACK_RANGE BAL_BOSS_ATTACK_RANGE
+#define BOSS_ATTACK_EXIT_RANGE (BAL_BOSS_ATTACK_RANGE + 16.0f)
+#define BOSS_ATTACK_DAMAGE BAL_BOSS_ATTACK_DAMAGE
 
-#define BOSS_SPECIAL_RANGE 120.0f
-#define BOSS_SPECIAL_DAMAGE 20
+#define BOSS_SPECIAL_RANGE BAL_BOSS_SPECIAL_RANGE
+#define BOSS_SPECIAL_DAMAGE BAL_BOSS_SPECIAL_DAMAGE
 
-#define BOSS_SPECIAL_COOLDOWN 5.0f
+#define BOSS_SPECIAL_COOLDOWN BAL_BOSS_SPECIAL_COOLDOWN
 #define BOSS_RECOVERY_TIME 1.0f
 
 #define BOSS_ENRAGED_SPEED 210.0f
@@ -81,7 +89,7 @@
  */
 #define BOSS_YIELD_TIME 0.18f
 #define BOSS_YIELD_STEP 7.0f
-#define BOSS_CONTACT_DISTANCE 58.0f
+#define BOSS_CONTACT_DISTANCE BAL_BOSS_CONTACT_DISTANCE
 
 /*
  * Local boss escape steering.
@@ -129,6 +137,48 @@ static float boss_previous_target_distance[MAX_ENEMIES];
 static float steering_direction_x[MAX_ENEMIES];
 static float steering_direction_y[MAX_ENEMIES];
 static float steering_memory_timer[MAX_ENEMIES];
+
+/*
+ * Attack wind-up of each enemy.
+ */
+static Windup windups[MAX_ENEMIES];
+
+/*
+ * Damage and wind-up time depend on the enemy type.
+ */
+static int Enemy_AttackDamage(
+    const Enemy *enemy)
+{
+    switch (enemy->adaptive_type)
+    {
+    case ADAPTIVE_AI_GUARDIAN:
+        return BAL_GUARDIAN_DAMAGE;
+
+    case ADAPTIVE_AI_ASSASSIN:
+        return BAL_ASSASSIN_DAMAGE;
+
+    case ADAPTIVE_AI_HUNTER:
+    default:
+        return BAL_HUNTER_DAMAGE;
+    }
+}
+
+static float Enemy_WindupTime(
+    const Enemy *enemy)
+{
+    switch (enemy->adaptive_type)
+    {
+    case ADAPTIVE_AI_GUARDIAN:
+        return BAL_GUARDIAN_WINDUP;
+
+    case ADAPTIVE_AI_ASSASSIN:
+        return BAL_ASSASSIN_WINDUP;
+
+    case ADAPTIVE_AI_HUNTER:
+    default:
+        return BAL_HUNTER_WINDUP;
+    }
+}
 
 #define ENEMY_STEERING_MEMORY_TIME 0.20f
 #define ENEMY_STEERING_TURN_PENALTY 18.0f
@@ -982,11 +1032,76 @@ static void Boss_PerformSpecial(
         break;
     }
 
+    /*
+     * A boss that is keeping its distance from a brawler
+     * uses its special more often.
+     */
+    if (boss->adaptation_level > 0.0f &&
+        boss->adaptive_decision ==
+            ADAPTIVE_DECISION_KEEP_DISTANCE)
+    {
+        boss->boss_special_timer *=
+            BAL_BOSS_KEEP_SPECIAL_SCALE;
+    }
+
     boss->boss_recovery_timer =
         BOSS_RECOVERY_TIME;
 
     boss->boss_state =
         BOSS_STATE_RECOVER;
+}
+
+static float Boss_MeleeWindupTime(
+    const Enemy *boss)
+{
+    switch (boss->boss_phase)
+    {
+    case BOSS_PHASE_THREE:
+        return BOSS_MELEE_WINDUP_TIME * 0.70f;
+
+    case BOSS_PHASE_TWO:
+        return BOSS_MELEE_WINDUP_TIME * 0.85f;
+
+    case BOSS_PHASE_ONE:
+    default:
+        return BOSS_MELEE_WINDUP_TIME;
+    }
+}
+
+static float Boss_AttackCooldown(
+    const Enemy *boss)
+{
+    switch (boss->boss_phase)
+    {
+    case BOSS_PHASE_THREE:
+        return boss->attack_cooldown * 0.55f;
+
+    case BOSS_PHASE_TWO:
+        return boss->attack_cooldown * 0.75f;
+
+    case BOSS_PHASE_ONE:
+    default:
+        return boss->attack_cooldown;
+    }
+}
+
+/*
+ * Start the long warning before the special attack.
+ * Boss_PerformSpecial() runs when it completes.
+ */
+static void Boss_BeginSpecial(
+    int index,
+    Enemy *boss)
+{
+    boss->boss_state =
+        BOSS_STATE_SPECIAL;
+
+    boss->state =
+        ENEMY_STATE_ATTACK;
+
+    Windup_Start(
+        &windups[index],
+        BOSS_SPECIAL_WINDUP_TIME);
 }
 
 static void Boss_GetMovementTarget(
@@ -2226,6 +2341,7 @@ static void BossFSM_Update(
     if (boss->state ==
         ENEMY_STATE_DEAD)
     {
+        Windup_Cancel(&windups[index]);
         boss->active = false;
 
         return;
@@ -2268,6 +2384,8 @@ static void BossFSM_Update(
     if (distance >
         BOSS_LOSE_RANGE)
     {
+        Windup_Cancel(&windups[index]);
+
         boss->state =
             ENEMY_STATE_IDLE;
 
@@ -2385,9 +2503,9 @@ static void BossFSM_Update(
             boss->state =
                 ENEMY_STATE_ATTACK;
 
-            Boss_PerformSpecial(
-                boss,
-                player);
+            Boss_BeginSpecial(
+                index,
+                boss);
 
             break;
         }
@@ -2429,13 +2547,46 @@ static void BossFSM_Update(
         break;
     }
 
-    /*
-     * -------------------------------------------------
-     * BOSS ATTACK
-     * -------------------------------------------------
-     */
+        /*
+         * -------------------------------------------------
+         * BOSS ATTACK
+         * -------------------------------------------------
+         */
     case BOSS_STATE_ATTACK:
     {
+        /*
+         * A swing in progress always finishes first,
+         * even if the player has dodged away. That is
+         * the whiff.
+         */
+        if (Windup_IsActive(&windups[index]))
+        {
+            if (Windup_Update(
+                    &windups[index],
+                    dt))
+            {
+                if (distance <=
+                        BOSS_ATTACK_RANGE +
+                            ENEMY_HIT_TOLERANCE &&
+                    Collision_HasLineOfSight(
+                        boss->x,
+                        boss->y,
+                        player->x,
+                        player->y))
+                {
+                    Player_TakeDamage(
+                        BOSS_ATTACK_DAMAGE);
+
+                    Audio_PlayBossAttack();
+                }
+
+                boss->attack_timer =
+                    Boss_AttackCooldown(boss);
+            }
+
+            break;
+        }
+
         /*
          * Special attack first.
          */
@@ -2450,32 +2601,35 @@ static void BossFSM_Update(
                 player->x,
                 player->y))
         {
-            boss->boss_state =
-                BOSS_STATE_SPECIAL;
-
-            Boss_PerformSpecial(
-                boss,
-                player);
+            Boss_BeginSpecial(
+                index,
+                boss);
 
             break;
         }
 
         /*
-         * -------------------------------------------------
-         * CLOSE-RANGE SPACING
-         * -------------------------------------------------
-         *
-         * ATTACK is a combat state, not a fixed position.
-         * If the boss gets physically too close, move it a
-         * small amount away from the player while remaining
-         * in ATTACK.
-         *
-         * Crucially, this does NOT switch back to CHASE.
-         * That gives the boss hysteresis and prevents the
-         * visible CHASE <-> ATTACK vibration at the boundary.
+         * Close-range spacing: if the boss gets
+         * physically too close, step away while
+         * staying in ATTACK.
          */
+        /*
+         * Against a close-range fighter the boss backs away
+         * earlier.
+         */
+        float contact_distance =
+            BOSS_CONTACT_DISTANCE;
+
+        if (boss->adaptation_level > 0.0f &&
+            boss->adaptive_decision ==
+                ADAPTIVE_DECISION_KEEP_DISTANCE)
+        {
+            contact_distance =
+                BAL_BOSS_KEEP_DISTANCE;
+        }
+
         if (distance <=
-                BOSS_CONTACT_DISTANCE &&
+                contact_distance &&
             Collision_HasLineOfSight(
                 boss->x,
                 boss->y,
@@ -2501,7 +2655,7 @@ static void BossFSM_Update(
         }
 
         /*
-         * Normal attack.
+         * In range: start a swing when ready.
          */
         if (distance <=
                 BOSS_ATTACK_RANGE &&
@@ -2514,41 +2668,17 @@ static void BossFSM_Update(
             if (boss->attack_timer <=
                 0.0f)
             {
-                Player_TakeDamage(
-                    BOSS_ATTACK_DAMAGE);
-
-                Audio_PlayBossAttack();
-
-                if (boss->boss_phase ==
-                    BOSS_PHASE_THREE)
-                {
-                    boss->attack_timer =
-                        boss->attack_cooldown *
-                        0.55f;
-                }
-                else if (boss->boss_phase ==
-                         BOSS_PHASE_TWO)
-                {
-                    boss->attack_timer =
-                        boss->attack_cooldown *
-                        0.75f;
-                }
-                else
-                {
-                    boss->attack_timer =
-                        boss->attack_cooldown;
-                }
+                Windup_Start(
+                    &windups[index],
+                    Boss_MeleeWindupTime(boss));
             }
 
             break;
         }
 
         /*
-         * Player moved outside the ATTACK exit range.
-         *
-         * ATTACK uses a wider exit threshold than its entry
-         * threshold. This hysteresis prevents rapid state
-         * switching when the distance hovers around 60 px.
+         * Hysteresis: ATTACK uses a wider exit range
+         * than its entry range.
          */
         if (distance <=
             BOSS_ATTACK_EXIT_RANGE)
@@ -2557,7 +2687,8 @@ static void BossFSM_Update(
         }
 
         /*
-         * Player moved far enough away to resume navigation.
+         * Player moved far enough away to resume
+         * navigation.
          */
         boss->state =
             ENEMY_STATE_CHASE;
@@ -2583,16 +2714,35 @@ static void BossFSM_Update(
         break;
     }
 
-    /*
-     * -------------------------------------------------
-     * BOSS SPECIAL
-     * -------------------------------------------------
-     */
+        /*
+         * -------------------------------------------------
+         * BOSS SPECIAL
+         * -------------------------------------------------
+         */
     case BOSS_STATE_SPECIAL:
     {
-        Boss_PerformSpecial(
-            boss,
-            player);
+        /*
+         * Without a running wind-up (for example after
+         * loading a save mid-attack), start a fresh one
+         * instead of striking instantly.
+         */
+        if (!Windup_IsActive(&windups[index]))
+        {
+            Boss_BeginSpecial(
+                index,
+                boss);
+
+            break;
+        }
+
+        if (Windup_Update(
+                &windups[index],
+                dt))
+        {
+            Boss_PerformSpecial(
+                boss,
+                player);
+        }
 
         break;
     }
@@ -2676,9 +2826,9 @@ static void BossFSM_Update(
             boss->state =
                 ENEMY_STATE_ATTACK;
 
-            Boss_PerformSpecial(
-                boss,
-                player);
+            Boss_BeginSpecial(
+                index,
+                boss);
 
             break;
         }
@@ -2755,7 +2905,42 @@ void EnemyFSM_Reset(void)
         steering_direction_x[i] = 0.0f;
         steering_direction_y[i] = 0.0f;
         steering_memory_timer[i] = 0.0f;
+
+        Windup_Reset(&windups[i]);
     }
+}
+
+bool EnemyFSM_GetWindup(
+    int index,
+    float *progress)
+{
+    if (index < 0 ||
+        index >= MAX_ENEMIES ||
+        !Windup_IsActive(&windups[index]))
+    {
+        return false;
+    }
+
+    if (progress != NULL)
+        *progress = Windup_GetProgress(&windups[index]);
+
+    return true;
+}
+
+float EnemyFSM_GetWindupRadius(
+    const Enemy *enemy)
+{
+    if (enemy == NULL)
+        return 0.0f;
+
+    if (enemy->is_boss)
+    {
+        return enemy->boss_state == BOSS_STATE_SPECIAL
+                   ? BOSS_SPECIAL_RANGE
+                   : BOSS_ATTACK_RANGE + ENEMY_HIT_TOLERANCE;
+    }
+
+    return ENEMY_ATTACK_RANGE + ENEMY_HIT_TOLERANCE;
 }
 
 void EnemyFSM_Update(
@@ -2848,6 +3033,8 @@ void EnemyFSM_Update(
     if (enemy->state ==
         ENEMY_STATE_DEAD)
     {
+        Windup_Cancel(&windups[index]);
+
         enemy->active = false;
 
         stuck_timers[index] = 0.0f;
@@ -2861,6 +3048,21 @@ void EnemyFSM_Update(
     if (enemy->state ==
         ENEMY_STATE_HURT)
     {
+        /*
+         * Getting hit early in a swing interrupts it and costs
+         * the enemy part of its cooldown. A swing that is more
+         * than half done is committed and still lands.
+         */
+        if (Windup_IsActive(&windups[index]) &&
+            Windup_GetProgress(&windups[index]) <
+                BAL_WINDUP_INTERRUPT_LIMIT)
+        {
+            Windup_Cancel(&windups[index]);
+
+            enemy->attack_timer =
+                enemy->attack_cooldown * 0.5f;
+        }
+
         if (enemy->hurt_timer > 0.0f)
             return;
 
@@ -3167,13 +3369,56 @@ void EnemyFSM_Update(
         break;
     }
 
-    /*
-     * -------------------------------------------------
-     * ATTACK
-     * -------------------------------------------------
-     */
+        /*
+         * -------------------------------------------------
+         * ATTACK
+         * -------------------------------------------------
+         */
     case ENEMY_STATE_ATTACK:
     {
+        /*
+         * A swing in progress always finishes, even if
+         * the player has dodged away. That is the whiff.
+         */
+        if (Windup_IsActive(&windups[index]))
+        {
+            if (Windup_Update(
+                    &windups[index],
+                    dt))
+            {
+                if (distance <=
+                        ENEMY_ATTACK_RANGE +
+                            ENEMY_HIT_TOLERANCE &&
+                    Collision_HasLineOfSight(
+                        enemy->x,
+                        enemy->y,
+                        player->x,
+                        player->y))
+                {
+                    Player_TakeDamage(
+                        Enemy_AttackDamage(enemy));
+                }
+
+                /*
+                 * An aggressive Guardian recovers faster.
+                 */
+                float cooldown_scale = 1.0f;
+
+                if (enemy->adaptation_level > 0.0f &&
+                    enemy->adaptive_decision ==
+                        ADAPTIVE_DECISION_ATTACK_AGGRESSIVE)
+                {
+                    cooldown_scale = 0.70f;
+                }
+
+                enemy->attack_timer =
+                    enemy->attack_cooldown *
+                    cooldown_scale;
+            }
+
+            break;
+        }
+
         if (distance >
                 ENEMY_ATTACK_RANGE ||
             !Collision_HasLineOfSight(
@@ -3200,29 +3445,15 @@ void EnemyFSM_Update(
             break;
         }
 
+        /*
+         * In range and ready: start the wind-up.
+         */
         if (enemy->attack_timer <=
             0.0f)
         {
-            /*
-             * An aggressive Guardian attacks faster.
-             * The defensive stance is handled in
-             * Enemy_TakeDamage (damage reduction).
-             */
-            float cooldown_scale = 1.0f;
-
-            if (enemy->adaptation_level > 0.0f &&
-                enemy->adaptive_decision ==
-                    ADAPTIVE_DECISION_ATTACK_AGGRESSIVE)
-            {
-                cooldown_scale = 0.70f;
-            }
-
-            Player_TakeDamage(
-                ENEMY_ATTACK_DAMAGE);
-
-            enemy->attack_timer =
-                enemy->attack_cooldown *
-                cooldown_scale;
+            Windup_Start(
+                &windups[index],
+                Enemy_WindupTime(enemy));
         }
 
         break;
