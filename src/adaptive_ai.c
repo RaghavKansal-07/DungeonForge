@@ -1,10 +1,20 @@
 #include "adaptive_ai.h"
 #include "behavior.h"
-
 #include "rng.h"
+
+#include <stddef.h>
+#include <stdint.h>
 #include <time.h>
 
 static bool adaptive_ai_initialized = false;
+
+/*
+ * Attacks measured before the boss trusts the attack-distance
+ * signal, and how close-range a player must be to count as a
+ * "brawler".
+ */
+#define BOSS_MIN_DISTANCE_SAMPLES 6
+#define BOSS_BRAWLER_RATIO 0.60f
 
 /*
  * ---------------------------------------------------------
@@ -32,6 +42,10 @@ static float ClampFloat(
  */
 static Rng ai_rng = {1u};
 
+/*
+ * Generate a random floating-point number
+ * between 0.0 and 1.0.
+ */
 static float RandomFloat(void)
 {
     return Rng_Float(&ai_rng);
@@ -44,17 +58,6 @@ static float RandomFloat(void)
  *
  * Select one direction according to the player's
  * observed probability distribution.
- *
- * This is intentionally probabilistic.
- *
- * Example:
- *
- *     LEFT   0.70
- *     RIGHT  0.20
- *     UP     0.07
- *     DOWN   0.03
- *
- * The AI therefore does not perfectly predict the player.
  *
  * Important:
  * A direction with zero probability must NEVER be selected.
@@ -79,9 +82,6 @@ static AdaptiveDecision SelectPredictedDirection(
     float random_value =
         RandomFloat() * total;
 
-    /*
-     * LEFT
-     */
     if (left > 0.0f &&
         random_value < left)
     {
@@ -90,9 +90,6 @@ static AdaptiveDecision SelectPredictedDirection(
 
     random_value -= left;
 
-    /*
-     * RIGHT
-     */
     if (right > 0.0f &&
         random_value < right)
     {
@@ -101,9 +98,6 @@ static AdaptiveDecision SelectPredictedDirection(
 
     random_value -= right;
 
-    /*
-     * UP
-     */
     if (up > 0.0f &&
         random_value < up)
     {
@@ -112,9 +106,6 @@ static AdaptiveDecision SelectPredictedDirection(
 
     random_value -= up;
 
-    /*
-     * DOWN
-     */
     if (down > 0.0f &&
         random_value < down)
     {
@@ -125,28 +116,18 @@ static AdaptiveDecision SelectPredictedDirection(
      * Floating-point values can leave a tiny residual
      * after subtraction. Never select an unseen direction
      * as a fallback.
-     *
-     * Return the last available observed direction.
      */
     if (down > 0.0f)
-    {
         return ADAPTIVE_DECISION_PREDICT_DOWN;
-    }
 
     if (up > 0.0f)
-    {
         return ADAPTIVE_DECISION_PREDICT_UP;
-    }
 
     if (right > 0.0f)
-    {
         return ADAPTIVE_DECISION_PREDICT_RIGHT;
-    }
 
     if (left > 0.0f)
-    {
         return ADAPTIVE_DECISION_PREDICT_LEFT;
-    }
 
     return ADAPTIVE_DECISION_NONE;
 }
@@ -176,18 +157,14 @@ void AdaptiveAI_Seed(unsigned int seed)
 
     adaptive_ai_initialized = true;
 }
+
 /*
  * ---------------------------------------------------------
  * Hunter
  * ---------------------------------------------------------
  *
- * Hunter studies the player's dodge behavior first.
- *
- * If enough dodge observations exist, the Hunter predicts
- * the player's future dodge direction probabilistically.
- *
- * If the player has not dodged enough times yet, the
- * Hunter falls back to the existing movement profile.
+ * Hunter studies the player's dodge behavior first, and falls
+ * back to the movement profile.
  */
 static AdaptiveDecisionResult
 AdaptiveAI_DecideHunter(
@@ -209,102 +186,27 @@ AdaptiveAI_DecideHunter(
         return result;
     }
 
-    /*
-     * -----------------------------------------------------
-     * Prefer Dodge Behavior
-     * -----------------------------------------------------
-     */
+    float left;
+    float right;
+    float up;
+    float down;
 
     if (profile->total_dodges >= 3)
     {
-        float left =
-            profile->dodge_left_probability;
-
-        float right =
-            profile->dodge_right_probability;
-
-        float up =
-            profile->dodge_up_probability;
-
-        float down =
-            profile->dodge_down_probability;
-
-        /*
-         * Find the strongest observed tendency.
-         */
-        float highest =
-            left;
-
-        if (right > highest)
-            highest = right;
-
-        if (up > highest)
-            highest = up;
-
-        if (down > highest)
-            highest = down;
-
-        /*
-         * The Hunter should not adapt with absolute
-         * certainty.
-         *
-         * Even an 81% player tendency becomes at most
-         * an 85% adaptation chance.
-         */
-        float adaptation =
-            ClampFloat(
-                highest,
-                0.0f,
-                0.85f);
-
-        result.adaptation_level =
-            adaptation;
-
-        result.probability =
-            highest;
-
-        /*
-         * Decide whether the Hunter adapts this cycle.
-         */
-        if (RandomFloat() <= adaptation)
-        {
-            /*
-             * Choose according to the complete
-             * probability distribution.
-             */
-            result.decision =
-                SelectPredictedDirection(
-                    left,
-                    right,
-                    up,
-                    down);
-
-            result.adapted = true;
-        }
-
-        return result;
+        left = profile->dodge_left_probability;
+        right = profile->dodge_right_probability;
+        up = profile->dodge_up_probability;
+        down = profile->dodge_down_probability;
+    }
+    else
+    {
+        left = profile->move_left_probability;
+        right = profile->move_right_probability;
+        up = profile->move_up_probability;
+        down = profile->move_down_probability;
     }
 
-    /*
-     * -----------------------------------------------------
-     * Movement Fallback
-     * -----------------------------------------------------
-     */
-
-    float left =
-        profile->move_left_probability;
-
-    float right =
-        profile->move_right_probability;
-
-    float up =
-        profile->move_up_probability;
-
-    float down =
-        profile->move_down_probability;
-
-    float highest =
-        left;
+    float highest = left;
 
     if (right > highest)
         highest = right;
@@ -315,6 +217,9 @@ AdaptiveAI_DecideHunter(
     if (down > highest)
         highest = down;
 
+    /*
+     * The Hunter should not adapt with absolute certainty.
+     */
     float adaptation =
         ClampFloat(
             highest,
@@ -336,7 +241,9 @@ AdaptiveAI_DecideHunter(
                 up,
                 down);
 
-        result.adapted = true;
+        result.adapted =
+            result.decision !=
+            ADAPTIVE_DECISION_NONE;
     }
 
     return result;
@@ -347,10 +254,9 @@ AdaptiveAI_DecideHunter(
  * Guardian
  * ---------------------------------------------------------
  *
- * Guardian currently uses the player's attack
- * frequency as the first adaptation signal.
- *
- * More attacks indicate a more aggressive player.
+ * The Guardian reacts to how intensely the player has been
+ * attacking recently. The score fades over time, so it
+ * forgets when the player stops attacking.
  */
 static AdaptiveDecisionResult
 AdaptiveAI_DecideGuardian(
@@ -366,9 +272,6 @@ AdaptiveAI_DecideGuardian(
 
     result.adapted = false;
 
-    /*
-     * Not enough recent attacks to judge the player.
-     */
     if (profile == NULL ||
         profile->recent_attack_score < 5.0f)
     {
@@ -416,11 +319,9 @@ AdaptiveAI_DecideGuardian(
  * Assassin
  * ---------------------------------------------------------
  *
- * Assassin uses dodge behavior when enough dodge
- * observations exist.
- *
- * The Assassin attempts to attack from the side
- * opposite to the player's strongest dodge tendency.
+ * Flanks the side opposite the player's strongest sideways
+ * habit. Players who favor up/down movement cannot be flanked
+ * sideways, so the Assassin rushes them instead.
  */
 static AdaptiveDecisionResult
 AdaptiveAI_DecideAssassin(
@@ -442,10 +343,6 @@ AdaptiveAI_DecideAssassin(
         return result;
     }
 
-    /*
-     * Prefer dodge behavior. Fall back to movement
-     * when there are too few dodges.
-     */
     float left;
     float right;
     float up;
@@ -477,9 +374,6 @@ AdaptiveAI_DecideAssassin(
             ? horizontal
             : vertical;
 
-    /*
-     * No observed tendency: nothing to adapt to.
-     */
     if (strongest <= 0.0f)
         return result;
 
@@ -487,10 +381,6 @@ AdaptiveAI_DecideAssassin(
 
     if (vertical > horizontal)
     {
-        /*
-         * A vertical habit cannot be flanked sideways.
-         * Rush the player instead.
-         */
         decision =
             ADAPTIVE_DECISION_CLOSE_DISTANCE;
     }
@@ -531,12 +421,17 @@ AdaptiveAI_DecideAssassin(
  * Boss
  * ---------------------------------------------------------
  *
- * Boss combines multiple adaptive behaviors.
+ * The boss combines several signals and acts on the strongest:
  *
- * Dodge behavior has priority because it gives the Boss
- * information about how the player reacts during combat.
+ *   - dodge habits (or movement habits as a fallback)
+ *       left/right -> flank the opposite side
+ *       up/down    -> close the distance
  *
- * Movement behavior remains the fallback.
+ *   - attack distance
+ *       a player who fights up close ("brawler") makes the boss
+ *       keep its distance
+ *
+ * Whichever signal is strongest decides.
  */
 static AdaptiveDecisionResult
 AdaptiveAI_DecideBoss(
@@ -558,97 +453,25 @@ AdaptiveAI_DecideBoss(
         return result;
     }
 
-    /*
-     * -----------------------------------------------------
-     * Dodge-Based Adaptation
-     * -----------------------------------------------------
-     */
+    float left;
+    float right;
+    float up;
+    float down;
 
     if (profile->total_dodges >= 3)
     {
-        float left =
-            profile->dodge_left_probability;
-
-        float right =
-            profile->dodge_right_probability;
-
-        float up =
-            profile->dodge_up_probability;
-
-        float down =
-            profile->dodge_down_probability;
-
-        float strongest =
-            left;
-
-        AdaptiveDecision decision =
-            ADAPTIVE_DECISION_FLANK_RIGHT;
-
-        if (right > strongest)
-        {
-            strongest = right;
-
-            decision =
-                ADAPTIVE_DECISION_FLANK_LEFT;
-        }
-
-        if (up > strongest)
-        {
-            strongest = up;
-
-            decision =
-                ADAPTIVE_DECISION_CLOSE_DISTANCE;
-        }
-
-        if (down > strongest)
-        {
-            strongest = down;
-
-            decision =
-                ADAPTIVE_DECISION_CLOSE_DISTANCE;
-        }
-
-        result.decision =
-            decision;
-
-        result.probability =
-            strongest;
-
-        result.adaptation_level =
-            ClampFloat(
-                strongest + 0.10f,
-                0.0f,
-                0.90f);
-
-        if (RandomFloat() <=
-            result.adaptation_level)
-        {
-            result.decision =
-                decision;
-
-            result.adapted = true;
-        }
-
-        return result;
+        left = profile->dodge_left_probability;
+        right = profile->dodge_right_probability;
+        up = profile->dodge_up_probability;
+        down = profile->dodge_down_probability;
     }
-
-    /*
-     * -----------------------------------------------------
-     * Movement Fallback
-     * -----------------------------------------------------
-     */
-
-    float left =
-        profile->move_left_probability;
-
-    float right =
-        profile->move_right_probability;
-
-    float up =
-        profile->move_up_probability;
-
-    float down =
-        profile->move_down_probability;
+    else
+    {
+        left = profile->move_left_probability;
+        right = profile->move_right_probability;
+        up = profile->move_up_probability;
+        down = profile->move_down_probability;
+    }
 
     float strongest =
         left;
@@ -680,8 +503,22 @@ AdaptiveAI_DecideBoss(
             ADAPTIVE_DECISION_CLOSE_DISTANCE;
     }
 
-    result.decision =
-        decision;
+    /*
+     * Attack-distance signal.
+     */
+    if (profile->attacks_measured >=
+            BOSS_MIN_DISTANCE_SAMPLES &&
+        profile->close_attack_ratio >=
+            BOSS_BRAWLER_RATIO &&
+        profile->close_attack_ratio >
+            strongest)
+    {
+        strongest =
+            profile->close_attack_ratio;
+
+        decision =
+            ADAPTIVE_DECISION_KEEP_DISTANCE;
+    }
 
     result.probability =
         strongest;

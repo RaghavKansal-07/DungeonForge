@@ -1,7 +1,24 @@
 #include "behavior.h"
+
 #include <math.h>
-#include <string.h>
 #include <stddef.h>
+#include <string.h>
+
+/*
+ * Time constant for forgetting attacks. After this many
+ * seconds an attack's weight has fallen to about 37%.
+ */
+#define BEHAVIOR_ATTACK_MEMORY_SECONDS 15.0f
+
+/*
+ * Attack distance bands, in pixels between the player's and
+ * the enemy's centers. Bodies touch at about 40 px.
+ */
+#define BEHAVIOR_CLOSE_ATTACK_DISTANCE 52.0f
+#define BEHAVIOR_MID_ATTACK_DISTANCE 66.0f
+
+/* Measured attacks needed before a fight style is reported. */
+#define BEHAVIOR_MIN_STYLE_SAMPLES 6
 
 /*
  * ---------------------------------------------------------
@@ -10,12 +27,6 @@
  */
 
 static PlayerBehavior behavior;
-
-/*
- * Time constant for forgetting attacks. After this many
- * seconds an attack's weight has fallen to about 37%.
- */
-#define BEHAVIOR_ATTACK_MEMORY_SECONDS 15.0f
 
 /*
  * ---------------------------------------------------------
@@ -88,6 +99,40 @@ static void Behavior_UpdateDodgeProbabilities(void)
 }
 
 /*
+ * Recalculate the attack-distance statistics.
+ */
+static void Behavior_UpdateAttackStats(void)
+{
+    if (behavior.attacks_measured > 0)
+    {
+        behavior.close_attack_ratio =
+            (float)behavior.close_attacks /
+            (float)behavior.attacks_measured;
+    }
+    else
+    {
+        behavior.close_attack_ratio = 0.0f;
+    }
+}
+
+/*
+ * Recalculate average damage taken per damage event.
+ */
+static void Behavior_UpdateAverageDamage(void)
+{
+    if (behavior.damage_events > 0)
+    {
+        behavior.average_damage_taken =
+            (float)behavior.total_damage_taken /
+            (float)behavior.damage_events;
+    }
+    else
+    {
+        behavior.average_damage_taken = 0.0f;
+    }
+}
+
+/*
  * ---------------------------------------------------------
  * INITIALIZATION
  * ---------------------------------------------------------
@@ -128,12 +173,37 @@ void Behavior_Update(void)
              * -------------------------------------------------
              * PLAYER ATTACK
              * -------------------------------------------------
+             *
+             * The event value is the distance to the nearest
+             * enemy. A negative (or invalid) value means there
+             * was no enemy to measure against.
              */
 
         case EVENT_PLAYER_ATTACK:
         {
             behavior.total_attacks++;
             behavior.recent_attack_score += 1.0f;
+
+            if (event.value >= 0.0f)
+            {
+                behavior.attacks_measured++;
+
+                if (event.value <=
+                    BEHAVIOR_CLOSE_ATTACK_DISTANCE)
+                {
+                    behavior.close_attacks++;
+                }
+                else if (event.value <=
+                         BEHAVIOR_MID_ATTACK_DISTANCE)
+                {
+                    behavior.mid_attacks++;
+                }
+                else
+                {
+                    behavior.far_attacks++;
+                }
+            }
+
             break;
         }
 
@@ -167,9 +237,6 @@ void Behavior_Update(void)
 
             case MOVE_NONE:
             default:
-                /*
-                 * No valid movement direction.
-                 */
                 break;
             }
 
@@ -180,12 +247,6 @@ void Behavior_Update(void)
              * -------------------------------------------------
              * PLAYER DODGE
              * -------------------------------------------------
-             *
-             * The player generates this event when SHIFT
-             * successfully starts a dodge.
-             *
-             * The dodge direction is stored as a primary
-             * cardinal direction.
              */
 
         case EVENT_PLAYER_DODGE:
@@ -212,9 +273,6 @@ void Behavior_Update(void)
 
             case DODGE_NONE:
             default:
-                /*
-                 * No valid dodge direction.
-                 */
                 break;
             }
 
@@ -266,10 +324,6 @@ void Behavior_Update(void)
         case EVENT_ENEMY_DAMAGED:
         case EVENT_NONE:
         default:
-            /*
-             * These events are not currently used
-             * by the behavior analyzer.
-             */
             break;
         }
     }
@@ -284,19 +338,9 @@ void Behavior_Update(void)
 
     Behavior_UpdateDodgeProbabilities();
 
-    /*
-     * Calculate average damage taken per damage event.
-     */
-    if (behavior.damage_events > 0)
-    {
-        behavior.average_damage_taken =
-            (float)behavior.total_damage_taken /
-            (float)behavior.damage_events;
-    }
-    else
-    {
-        behavior.average_damage_taken = 0.0f;
-    }
+    Behavior_UpdateAttackStats();
+
+    Behavior_UpdateAverageDamage();
 }
 
 /*
@@ -324,94 +368,6 @@ void Behavior_Tick(
 
     if (behavior.recent_attack_score < 0.001f)
         behavior.recent_attack_score = 0.0f;
-}
-
-bool Behavior_IsValid(
-    const PlayerBehavior *saved)
-{
-    if (saved == NULL)
-        return false;
-
-    if (!isfinite(saved->recent_attack_score) ||
-        saved->recent_attack_score < 0.0f)
-    {
-        return false;
-    }
-
-    const int counters[] =
-        {
-            saved->total_attacks,
-            saved->total_movements,
-            saved->move_left_count,
-            saved->move_right_count,
-            saved->move_up_count,
-            saved->move_down_count,
-            saved->total_dodges,
-            saved->dodge_left_count,
-            saved->dodge_right_count,
-            saved->dodge_up_count,
-            saved->dodge_down_count,
-            saved->total_damage_taken,
-            saved->damage_events,
-            saved->total_healing};
-
-    const int counter_count =
-        sizeof(counters) / sizeof(counters[0]);
-
-    for (int i = 0; i < counter_count; i++)
-    {
-        if (counters[i] < 0 ||
-            counters[i] > 100000000)
-        {
-            return false;
-        }
-    }
-
-    if (saved->move_left_count > saved->total_movements ||
-        saved->move_right_count > saved->total_movements ||
-        saved->move_up_count > saved->total_movements ||
-        saved->move_down_count > saved->total_movements ||
-        saved->dodge_left_count > saved->total_dodges ||
-        saved->dodge_right_count > saved->total_dodges ||
-        saved->dodge_up_count > saved->total_dodges ||
-        saved->dodge_down_count > saved->total_dodges)
-    {
-        return false;
-    }
-
-    return true;
-}
-
-bool Behavior_Restore(
-    const PlayerBehavior *saved)
-{
-    if (!Behavior_IsValid(saved))
-        return false;
-
-    behavior = *saved;
-    behavior.initialized = true;
-
-    if (behavior.recent_attack_score > 100.0f)
-        behavior.recent_attack_score = 100.0f;
-
-    /*
-     * Never trust saved derived values.
-     */
-    Behavior_UpdateMovementProbabilities();
-    Behavior_UpdateDodgeProbabilities();
-
-    if (behavior.damage_events > 0)
-    {
-        behavior.average_damage_taken =
-            (float)behavior.total_damage_taken /
-            (float)behavior.damage_events;
-    }
-    else
-    {
-        behavior.average_damage_taken = 0.0f;
-    }
-
-    return true;
 }
 
 /*
@@ -468,15 +424,76 @@ float Behavior_GetDodgeDownProbability(void)
 
 /*
  * ---------------------------------------------------------
+ * FIGHT STYLE
+ * ---------------------------------------------------------
+ */
+
+FightStyle Behavior_GetFightStyle(void)
+{
+    if (behavior.attacks_measured <
+        BEHAVIOR_MIN_STYLE_SAMPLES)
+    {
+        return FIGHT_STYLE_UNKNOWN;
+    }
+
+    /*
+     * Ties prefer the closer band.
+     */
+    if (behavior.close_attacks >= behavior.mid_attacks &&
+        behavior.close_attacks >= behavior.far_attacks)
+    {
+        return FIGHT_STYLE_CLOSE;
+    }
+
+    if (behavior.mid_attacks >= behavior.far_attacks)
+        return FIGHT_STYLE_MID;
+
+    return FIGHT_STYLE_FAR;
+}
+
+float Behavior_GetFightStyleShare(void)
+{
+    FightStyle style =
+        Behavior_GetFightStyle();
+
+    if (style == FIGHT_STYLE_UNKNOWN ||
+        behavior.attacks_measured <= 0)
+    {
+        return 0.0f;
+    }
+
+    int dominant = 0;
+
+    switch (style)
+    {
+    case FIGHT_STYLE_CLOSE:
+        dominant = behavior.close_attacks;
+        break;
+
+    case FIGHT_STYLE_MID:
+        dominant = behavior.mid_attacks;
+        break;
+
+    case FIGHT_STYLE_FAR:
+        dominant = behavior.far_attacks;
+        break;
+
+    case FIGHT_STYLE_UNKNOWN:
+    default:
+        break;
+    }
+
+    return (float)dominant /
+           (float)behavior.attacks_measured;
+}
+
+/*
+ * ---------------------------------------------------------
  * DATA SUFFICIENCY
  * ---------------------------------------------------------
  *
  * We don't want enemies adapting aggressively from only
  * one or two player actions.
- *
- * A minimum number of movement observations is therefore
- * required before the adaptive AI considers the movement
- * profile reliable enough to use.
  */
 
 bool Behavior_HasEnoughData(void)
@@ -490,4 +507,111 @@ bool Behavior_HasEnoughData(void)
 
     return total_observations >=
            minimum_observations;
+}
+
+/*
+ * ---------------------------------------------------------
+ * SAVE / LOAD SUPPORT
+ * ---------------------------------------------------------
+ */
+
+bool Behavior_IsValid(
+    const PlayerBehavior *saved)
+{
+    if (saved == NULL)
+        return false;
+
+    if (!isfinite(saved->recent_attack_score) ||
+        saved->recent_attack_score < 0.0f)
+    {
+        return false;
+    }
+
+    const int counters[] =
+        {
+            saved->total_attacks,
+            saved->attacks_measured,
+            saved->close_attacks,
+            saved->mid_attacks,
+            saved->far_attacks,
+            saved->total_movements,
+            saved->move_left_count,
+            saved->move_right_count,
+            saved->move_up_count,
+            saved->move_down_count,
+            saved->total_dodges,
+            saved->dodge_left_count,
+            saved->dodge_right_count,
+            saved->dodge_up_count,
+            saved->dodge_down_count,
+            saved->total_damage_taken,
+            saved->damage_events,
+            saved->total_healing};
+
+    const int counter_count =
+        sizeof(counters) / sizeof(counters[0]);
+
+    for (int i = 0; i < counter_count; i++)
+    {
+        if (counters[i] < 0 ||
+            counters[i] > 100000000)
+        {
+            return false;
+        }
+    }
+
+    /*
+     * A direction count can never exceed its total.
+     */
+    if (saved->move_left_count > saved->total_movements ||
+        saved->move_right_count > saved->total_movements ||
+        saved->move_up_count > saved->total_movements ||
+        saved->move_down_count > saved->total_movements ||
+        saved->dodge_left_count > saved->total_dodges ||
+        saved->dodge_right_count > saved->total_dodges ||
+        saved->dodge_up_count > saved->total_dodges ||
+        saved->dodge_down_count > saved->total_dodges)
+    {
+        return false;
+    }
+
+    /*
+     * Measured attacks are a subset of all attacks, and the
+     * three distance bands must add up to exactly that subset.
+     */
+    if (saved->attacks_measured > saved->total_attacks)
+        return false;
+
+    if (saved->close_attacks +
+            saved->mid_attacks +
+            saved->far_attacks !=
+        saved->attacks_measured)
+    {
+        return false;
+    }
+
+    return true;
+}
+
+bool Behavior_Restore(
+    const PlayerBehavior *saved)
+{
+    if (!Behavior_IsValid(saved))
+        return false;
+
+    behavior = *saved;
+    behavior.initialized = true;
+
+    if (behavior.recent_attack_score > 100.0f)
+        behavior.recent_attack_score = 100.0f;
+
+    /*
+     * Never trust saved derived values.
+     */
+    Behavior_UpdateMovementProbabilities();
+    Behavior_UpdateDodgeProbabilities();
+    Behavior_UpdateAttackStats();
+    Behavior_UpdateAverageDamage();
+
+    return true;
 }

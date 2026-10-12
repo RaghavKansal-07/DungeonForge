@@ -5,6 +5,7 @@
 
 #include "events.h"
 
+
 /*
  * ---------------------------------------------------------
  * PLAYER BEHAVIOR PROFILE
@@ -19,11 +20,20 @@
  * The system uses counters, averages and probabilities.
  */
 
+
 /*
- * ---------------------------------------------------------
- * BEHAVIOR PROFILE
- * ---------------------------------------------------------
+ * How far from the nearest enemy the player usually fights.
  */
+typedef enum
+{
+    FIGHT_STYLE_UNKNOWN,
+
+    FIGHT_STYLE_CLOSE,
+    FIGHT_STYLE_MID,
+    FIGHT_STYLE_FAR
+
+} FightStyle;
+
 
 typedef struct
 {
@@ -42,6 +52,23 @@ typedef struct
     float recent_attack_score;
 
     /*
+     * Attacks made while an enemy was close enough to
+     * measure, split by distance from that enemy:
+     *
+     *   close - almost touching
+     *   mid   - normal fighting distance
+     *   far   - at the edge of the player's reach
+     *
+     * close + mid + far == attacks_measured
+     */
+    int attacks_measured;
+
+    int close_attacks;
+    int mid_attacks;
+    int far_attacks;
+
+
+    /*
      * -----------------------------------------------------
      * Movement Behavior
      * -----------------------------------------------------
@@ -53,6 +80,7 @@ typedef struct
     int move_right_count;
     int move_up_count;
     int move_down_count;
+
 
     /*
      * -----------------------------------------------------
@@ -67,6 +95,7 @@ typedef struct
     int dodge_up_count;
     int dodge_down_count;
 
+
     /*
      * -----------------------------------------------------
      * Damage / Aggression Behavior
@@ -78,6 +107,7 @@ typedef struct
     int damage_events;
 
     int total_healing;
+
 
     /*
      * -----------------------------------------------------
@@ -97,6 +127,7 @@ typedef struct
     float dodge_up_probability;
     float dodge_down_probability;
 
+
     /*
      * -----------------------------------------------------
      * Combat Statistics
@@ -105,18 +136,20 @@ typedef struct
 
     float average_damage_taken;
 
+    /* Share of measured attacks that were close range. */
+    float close_attack_ratio;
+
+
     /*
      * -----------------------------------------------------
      * Profile State
      * -----------------------------------------------------
-     *
-     * Indicates whether enough information has been
-     * collected to make meaningful adaptive decisions.
      */
 
     bool initialized;
 
 } PlayerBehavior;
+
 
 /*
  * ---------------------------------------------------------
@@ -129,18 +162,25 @@ typedef struct
  */
 void Behavior_Init(void);
 
+
 /*
  * Process all pending gameplay events.
  *
  * Events are consumed from the global event queue and
  * converted into behavioral statistics.
+ *
+ * For EVENT_PLAYER_ATTACK, the event's value is the distance
+ * in pixels to the nearest enemy, or a negative number when
+ * no enemy was near.
  */
 void Behavior_Update(void);
+
 
 /*
  * Get the current player behavior profile.
  */
 const PlayerBehavior *Behavior_GetProfile(void);
+
 
 /*
  * ---------------------------------------------------------
@@ -148,45 +188,35 @@ const PlayerBehavior *Behavior_GetProfile(void);
  * ---------------------------------------------------------
  */
 
-/*
- * Get the probability that the player moves left.
- */
 float Behavior_GetMoveLeftProbability(void);
-
-/*
- * Get the probability that the player moves right.
- */
 float Behavior_GetMoveRightProbability(void);
-
-/*
- * Get the probability that the player moves up.
- */
 float Behavior_GetMoveUpProbability(void);
-
-/*
- * Get the probability that the player moves down.
- */
 float Behavior_GetMoveDownProbability(void);
 
-/*
- * Get the probability that the player dodges left.
- */
 float Behavior_GetDodgeLeftProbability(void);
-
-/*
- * Get the probability that the player dodges right.
- */
 float Behavior_GetDodgeRightProbability(void);
-
-/*
- * Get the probability that the player dodges up.
- */
 float Behavior_GetDodgeUpProbability(void);
+float Behavior_GetDodgeDownProbability(void);
+
 
 /*
- * Get the probability that the player dodges down.
+ * ---------------------------------------------------------
+ * FIGHT STYLE
+ * ---------------------------------------------------------
  */
-float Behavior_GetDodgeDownProbability(void);
+
+/*
+ * The distance band the player attacks from most often.
+ * FIGHT_STYLE_UNKNOWN until enough attacks were measured.
+ */
+FightStyle Behavior_GetFightStyle(void);
+
+/*
+ * Share (0.0 to 1.0) of measured attacks that fall in the
+ * dominant band. 0.0 while the style is unknown.
+ */
+float Behavior_GetFightStyleShare(void);
+
 
 /*
  * ---------------------------------------------------------
@@ -200,6 +230,24 @@ float Behavior_GetDodgeDownProbability(void);
  */
 bool Behavior_HasEnoughData(void);
 
+
+/*
+ * Advance time-based statistics (attack score decay).
+ * Call once per gameplay frame.
+ */
+void Behavior_Tick(
+    float dt
+);
+
+
+/*
+ * Check a profile without applying it.
+ */
+bool Behavior_IsValid(
+    const PlayerBehavior *profile
+);
+
+
 /*
  * Restore a previously saved behavior profile.
  *
@@ -211,19 +259,7 @@ bool Behavior_HasEnoughData(void);
  * unchanged) if the saved data is invalid.
  */
 bool Behavior_Restore(
-    const PlayerBehavior *saved);
-
-/*
- * Advance time-based statistics (attack score decay).
- * Call once per gameplay frame.
- */
-void Behavior_Tick(
-    float dt);
-
-/*
- * Check a profile without applying it.
- */
-bool Behavior_IsValid(
-    const PlayerBehavior *profile);
+    const PlayerBehavior *saved
+);
 
 #endif
