@@ -1,7 +1,7 @@
 #include "lighting.h"
 
 #include "raylib.h"
-#include "effects.h"
+#include "gamecamera.h"
 #include "player.h"
 #include "enemy.h"
 #include "item_drop.h"
@@ -30,7 +30,6 @@ static RenderTexture2D light_mask;
 static bool light_ready = false;
 static bool light_enabled = true;
 
-
 void Lighting_Init(void)
 {
     light_mask =
@@ -55,7 +54,6 @@ void Lighting_Init(void)
         TEXTURE_FILTER_BILINEAR);
 }
 
-
 void Lighting_Shutdown(void)
 {
     if (light_ready)
@@ -65,24 +63,37 @@ void Lighting_Shutdown(void)
     }
 }
 
-
 void Lighting_Toggle(void)
 {
     light_enabled = !light_enabled;
 }
 
+/*
+ * Is a glow of this radius at least partly on screen?
+ */
+static bool Lighting_OnScreen(
+    Vector2 position,
+    float radius)
+{
+    return position.x > -radius &&
+           position.y > -radius &&
+           position.x < (float)GetScreenWidth() + radius &&
+           position.y < (float)GetScreenHeight() + radius;
+}
 
 /*
  * Soft glow: stacked circles added together, so the light
  * is strongest in the middle and fades toward the edge.
  */
 static void Lighting_Glow(
-    float x,
-    float y,
+    Vector2 position,
     float radius,
     Color color,
     float intensity)
 {
+    if (!Lighting_OnScreen(position, radius))
+        return;
+
     int alpha =
         (int)(255.0f * intensity /
               (float)LIGHT_RINGS);
@@ -100,13 +111,12 @@ static void Lighting_Glow(
             (float)LIGHT_RINGS;
 
         DrawCircle(
-            (int)x,
-            (int)y,
+            (int)position.x,
+            (int)position.y,
             r,
             color);
     }
 }
-
 
 static Color Lighting_EnemyColor(
     const Enemy *enemy)
@@ -144,7 +154,6 @@ static Color Lighting_EnemyColor(
     }
 }
 
-
 /*
  * Dark edges that draw the eye toward the center.
  */
@@ -155,7 +164,7 @@ static void Lighting_Vignette(void)
 
     int band = 150;
 
-    Color edge  = (Color){0, 0, 0, 120};
+    Color edge = (Color){0, 0, 0, 120};
     Color clear = (Color){0, 0, 0, 0};
 
     DrawRectangleGradientV(0, 0, w, band, edge, clear);
@@ -164,7 +173,6 @@ static void Lighting_Vignette(void)
     DrawRectangleGradientH(w - band, 0, band, h, clear, edge);
 }
 
-
 void Lighting_Render(void)
 {
     if (!light_enabled ||
@@ -172,9 +180,6 @@ void Lighting_Render(void)
     {
         return;
     }
-
-    Vector2 shake =
-        Effects_GetShake();
 
     const Dungeon *dungeon =
         Game_GetDungeon();
@@ -187,7 +192,7 @@ void Lighting_Render(void)
 
     /*
      * ---------------------------------------------------
-     * Build the light map
+     * Build the light map (in screen space)
      * ---------------------------------------------------
      */
     BeginTextureMode(light_mask);
@@ -200,14 +205,13 @@ void Lighting_Render(void)
      * Faint color for each room.
      */
     static const Color room_tints[] =
-    {
-        {  70, 110, 255, 255 },
-        { 255, 160,  60, 255 },
-        {  70, 220, 140, 255 },
-        { 200,  90, 255, 255 },
-        {  60, 210, 230, 255 },
-        { 255,  90,  80, 255 }
-    };
+        {
+            {70, 110, 255, 255},
+            {255, 160, 60, 255},
+            {70, 220, 140, 255},
+            {200, 90, 255, 255},
+            {60, 210, 230, 255},
+            {255, 90, 80, 255}};
 
     if (dungeon != NULL)
     {
@@ -223,9 +227,14 @@ void Lighting_Render(void)
 
             tint.a = 22;
 
+            Vector2 corner =
+                GameCamera_WorldToScreen(
+                    (float)(room->x * TILE_SIZE),
+                    (float)(room->y * TILE_SIZE));
+
             DrawRectangle(
-                (int)((float)(room->x * TILE_SIZE) + shake.x),
-                (int)((float)(room->y * TILE_SIZE) + shake.y),
+                (int)corner.x,
+                (int)corner.y,
                 room->width * TILE_SIZE,
                 room->height * TILE_SIZE,
                 tint);
@@ -246,8 +255,7 @@ void Lighting_Render(void)
             continue;
 
         Lighting_Glow(
-            drop->x + shake.x,
-            drop->y + shake.y,
+            GameCamera_WorldToScreen(drop->x, drop->y),
             64.0f,
             (Color){255, 205, 80, 255},
             0.55f);
@@ -271,8 +279,7 @@ void Lighting_Render(void)
         }
 
         Lighting_Glow(
-            enemy->x + shake.x,
-            enemy->y + shake.y,
+            GameCamera_WorldToScreen(enemy->x, enemy->y),
             enemy->is_boss ? 190.0f : 115.0f,
             Lighting_EnemyColor(enemy),
             enemy->is_boss ? 0.50f : 0.42f);
@@ -288,8 +295,7 @@ void Lighting_Render(void)
             sinf(time * 23.0f) * 4.0f;
 
         Lighting_Glow(
-            player->x + shake.x,
-            player->y + shake.y,
+            GameCamera_WorldToScreen(player->x, player->y),
             270.0f + flicker,
             (Color){255, 225, 170, 255},
             0.62f);
@@ -313,7 +319,7 @@ void Lighting_Render(void)
             0.0f,
             (float)light_mask.texture.width,
             -(float)light_mask.texture.height},
-        (Vector2){ 0.0f, 0.0f },
+        (Vector2){0.0f, 0.0f},
         WHITE);
 
     EndBlendMode();

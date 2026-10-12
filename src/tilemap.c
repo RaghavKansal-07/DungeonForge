@@ -3,7 +3,6 @@
 
 static TileType map[MAP_HEIGHT][MAP_WIDTH];
 
-
 /*
  * ---------------------------------------------------------
  * TILE VISUAL HELPERS
@@ -19,8 +18,7 @@ static TileType map[MAP_HEIGHT][MAP_WIDTH];
  */
 static Color TileMap_GetFloorColor(
     int x,
-    int y
-)
+    int y)
 {
     /*
      * Small deterministic pattern.
@@ -31,35 +29,34 @@ static Color TileMap_GetFloorColor(
     int pattern =
         (x * 17 +
          y * 31 +
-         x * y) % 5;
+         x * y) %
+        5;
 
     switch (pattern)
     {
-        case 0:
-            return (Color){48, 48, 52, 255};
+    case 0:
+        return (Color){48, 48, 52, 255};
 
-        case 1:
-            return (Color){51, 51, 55, 255};
+    case 1:
+        return (Color){51, 51, 55, 255};
 
-        case 2:
-            return (Color){54, 54, 58, 255};
+    case 2:
+        return (Color){54, 54, 58, 255};
 
-        case 3:
-            return (Color){49, 49, 53, 255};
+    case 3:
+        return (Color){49, 49, 53, 255};
 
-        default:
-            return (Color){52, 52, 56, 255};
+    default:
+        return (Color){52, 52, 56, 255};
     }
 }
-
 
 /*
  * Return the base wall color.
  */
 static Color TileMap_GetWallColor(
     int x,
-    int y
-)
+    int y)
 {
     /*
      * Slight deterministic variation keeps large
@@ -68,24 +65,24 @@ static Color TileMap_GetWallColor(
     int pattern =
         (x * 13 +
          y * 7 +
-         x * y) % 4;
+         x * y) %
+        4;
 
     switch (pattern)
     {
-        case 0:
-            return (Color){68, 68, 72, 255};
+    case 0:
+        return (Color){68, 68, 72, 255};
 
-        case 1:
-            return (Color){72, 72, 76, 255};
+    case 1:
+        return (Color){72, 72, 76, 255};
 
-        case 2:
-            return (Color){65, 65, 69, 255};
+    case 2:
+        return (Color){65, 65, 69, 255};
 
-        default:
-            return (Color){70, 70, 74, 255};
+    default:
+        return (Color){70, 70, 74, 255};
     }
 }
-
 
 /*
  * ---------------------------------------------------------
@@ -114,21 +111,36 @@ void TileMap_Init(void)
     }
 }
 
-
 /*
  * ---------------------------------------------------------
  * TILE MAP RENDERING
  * ---------------------------------------------------------
  */
 
-void TileMap_Render(void)
+void TileMap_RenderRegion(
+    int min_x,
+    int min_y,
+    int max_x,
+    int max_y)
 {
-    for (int y = 0;
-         y < MAP_HEIGHT;
+    if (min_x < 0)
+        min_x = 0;
+
+    if (min_y < 0)
+        min_y = 0;
+
+    if (max_x > MAP_WIDTH - 1)
+        max_x = MAP_WIDTH - 1;
+
+    if (max_y > MAP_HEIGHT - 1)
+        max_y = MAP_HEIGHT - 1;
+
+    for (int y = min_y;
+         y <= max_y;
          y++)
     {
-        for (int x = 0;
-             x < MAP_WIDTH;
+        for (int x = min_x;
+             x <= max_x;
              x++)
         {
             int screen_x =
@@ -147,8 +159,7 @@ void TileMap_Render(void)
                 Color wall_color =
                     TileMap_GetWallColor(
                         x,
-                        y
-                    );
+                        y);
 
                 /*
                  * Main wall body.
@@ -158,8 +169,7 @@ void TileMap_Render(void)
                     screen_y,
                     TILE_SIZE,
                     TILE_SIZE,
-                    wall_color
-                );
+                    wall_color);
 
                 /*
                  * Subtle top highlight.
@@ -174,9 +184,7 @@ void TileMap_Render(void)
                     2,
                     Fade(
                         WHITE,
-                        0.08f
-                    )
-                );
+                        0.08f));
 
                 /*
                  * Subtle left highlight.
@@ -188,9 +196,7 @@ void TileMap_Render(void)
                     TILE_SIZE,
                     Fade(
                         WHITE,
-                        0.05f
-                    )
-                );
+                        0.05f));
 
                 /*
                  * Dark bottom edge.
@@ -204,9 +210,7 @@ void TileMap_Render(void)
                     2,
                     Fade(
                         BLACK,
-                        0.20f
-                    )
-                );
+                        0.20f));
 
                 /*
                  * Dark right edge.
@@ -220,9 +224,7 @@ void TileMap_Render(void)
                     TILE_SIZE,
                     Fade(
                         BLACK,
-                        0.16f
-                    )
-                );
+                        0.16f));
 
                 /*
                  * Very subtle tile boundary.
@@ -234,9 +236,7 @@ void TileMap_Render(void)
                     TILE_SIZE,
                     Fade(
                         BLACK,
-                        0.12f
-                    )
-                );
+                        0.12f));
 
                 continue;
             }
@@ -250,8 +250,7 @@ void TileMap_Render(void)
             Color floor_color =
                 TileMap_GetFloorColor(
                     x,
-                    y
-                );
+                    y);
 
             /*
              * Main floor tile.
@@ -261,8 +260,7 @@ void TileMap_Render(void)
                 screen_y,
                 TILE_SIZE,
                 TILE_SIZE,
-                floor_color
-            );
+                floor_color);
 
             /*
              * Very subtle floor border.
@@ -277,9 +275,7 @@ void TileMap_Render(void)
                 TILE_SIZE,
                 Fade(
                     BLACK,
-                    0.10f
-                )
-            );
+                    0.10f));
 
             /*
              * Small center detail.
@@ -297,13 +293,19 @@ void TileMap_Render(void)
                 2,
                 Fade(
                     WHITE,
-                    0.035f
-                )
-            );
+                    0.035f));
         }
     }
 }
 
+void TileMap_Render(void)
+{
+    TileMap_RenderRegion(
+        0,
+        0,
+        MAP_WIDTH - 1,
+        MAP_HEIGHT - 1);
+}
 
 /*
  * ---------------------------------------------------------
@@ -313,8 +315,7 @@ void TileMap_Render(void)
 
 TileType TileMap_GetTile(
     int x,
-    int y
-)
+    int y)
 {
     /*
      * Treat positions outside the map as walls.
@@ -334,7 +335,6 @@ TileType TileMap_GetTile(
     return map[y][x];
 }
 
-
 /*
  * ---------------------------------------------------------
  * WALKABILITY
@@ -343,15 +343,12 @@ TileType TileMap_GetTile(
 
 bool TileMap_IsWalkable(
     int x,
-    int y
-)
+    int y)
 {
     return TileMap_GetTile(
                x,
-               y
-           ) == TILE_FLOOR;
+               y) == TILE_FLOOR;
 }
-
 
 /*
  * ---------------------------------------------------------
@@ -362,8 +359,7 @@ bool TileMap_IsWalkable(
 void TileMap_SetTile(
     int x,
     int y,
-    TileType type
-)
+    TileType type)
 {
     /*
      * Ignore coordinates outside the map.

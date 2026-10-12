@@ -3,9 +3,8 @@
 
 #include <stdbool.h>
 
-#define MAX_DUNGEON_ROOMS 20
-#define MAX_DUNGEON_CONNECTIONS 40
-
+#define MAX_DUNGEON_ROOMS 32
+#define MAX_DUNGEON_CONNECTIONS 64
 
 typedef struct
 {
@@ -22,14 +21,12 @@ typedef struct
 
 } DungeonRoom;
 
-
 typedef struct
 {
     int room_a;
     int room_b;
 
 } DungeonConnection;
-
 
 typedef struct
 {
@@ -45,16 +42,13 @@ typedef struct
 
 } Dungeon;
 
-
 /*
  * Initialize and procedurally generate
  * a dungeon using the supplied seed.
  */
 void Dungeon_Init(
     Dungeon *dungeon,
-    unsigned int seed
-);
-
+    unsigned int seed);
 
 /*
  * Get the seed used to generate the dungeon.
@@ -64,9 +58,7 @@ void Dungeon_Init(
  * deterministically from the same seed.
  */
 unsigned int Dungeon_GetSeed(
-    const Dungeon *dungeon
-);
-
+    const Dungeon *dungeon);
 
 /*
  * Get the world-space position where
@@ -75,9 +67,7 @@ unsigned int Dungeon_GetSeed(
 bool Dungeon_GetPlayerSpawn(
     const Dungeon *dungeon,
     float *x,
-    float *y
-);
-
+    float *y);
 
 /*
  * Check whether two rooms are directly
@@ -86,9 +76,7 @@ bool Dungeon_GetPlayerSpawn(
 bool Dungeon_AreRoomsConnected(
     const Dungeon *dungeon,
     int room_a,
-    int room_b
-);
-
+    int room_b);
 
 /*
  * Get the number of rooms directly
@@ -96,9 +84,7 @@ bool Dungeon_AreRoomsConnected(
  */
 int Dungeon_GetRoomConnectionCount(
     const Dungeon *dungeon,
-    int room_index
-);
-
+    int room_index);
 
 /*
  * Get the index of the connected room
@@ -117,8 +103,29 @@ int Dungeon_GetRoomConnectionCount(
 int Dungeon_GetConnectedRoom(
     const Dungeon *dungeon,
     int room_index,
-    int connection_index
-);
+    int connection_index);
 
+/*
+ * Number of corridor hops between two rooms.
+ *
+ * Returns -1 if either room is invalid or the rooms
+ * are not connected.
+ */
+int Dungeon_GetRoomDistance(
+    const Dungeon *dungeon,
+    int from_room,
+    int to_room);
+
+/*
+ * The room that is the most hops away from from_room.
+ *
+ * Ties are broken by straight-line distance, then by
+ * the lower room index, so the result is deterministic.
+ *
+ * Returns -1 if from_room is invalid.
+ */
+int Dungeon_GetFarthestRoom(
+    const Dungeon *dungeon,
+    int from_room);
 
 #endif

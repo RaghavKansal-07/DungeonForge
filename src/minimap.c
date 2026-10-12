@@ -3,6 +3,7 @@
 #include "raylib.h"
 #include "tilemap.h"
 #include "collision.h"
+#include "gamecamera.h"
 #include "player.h"
 #include "enemy.h"
 #include "item_drop.h"
@@ -18,14 +19,30 @@
 #define MINIMAP_REVEAL_RADIUS 8
 
 /* Pixels per tile on the minimap. */
-#define MINIMAP_SCALE 4
+#define MINIMAP_SCALE 3
 
 #define MINIMAP_MAP_WIDTH (MAP_WIDTH * MINIMAP_SCALE)
 #define MINIMAP_MAP_HEIGHT (MAP_HEIGHT * MINIMAP_SCALE)
 
+#define MINIMAP_PANEL_WIDTH (MINIMAP_MAP_WIDTH + 16)
+#define MINIMAP_PANEL_HEIGHT (MINIMAP_MAP_HEIGHT + 48)
+
+/* Opacity while something is under the minimap. */
+#define MINIMAP_FADED_ALPHA 0.28f
+
+/* How close (pixels) something must be to count as "under". */
+#define MINIMAP_FADE_MARGIN 24
+
 static bool explored[MAP_HEIGHT][MAP_WIDTH];
 
 static bool minimap_visible = true;
+
+/* Top-right corner of the screen. Set every frame. */
+static int panel_x = 0;
+static int panel_y = 8;
+
+/* Current opacity, eased toward its target. */
+static float panel_alpha = 1.0f;
 
 /*
  * Same colors as the room lighting.
@@ -38,6 +55,13 @@ static const Color room_tints[] =
         {200, 90, 255, 255},
         {60, 210, 230, 255},
         {255, 90, 80, 255}};
+
+static Color Minimap_Tint(Color color, float alpha)
+{
+    color.a = (unsigned char)((float)color.a * alpha);
+
+    return color;
+}
 
 static bool Minimap_IsExplored(int x, int y)
 {
@@ -75,6 +99,71 @@ static int Minimap_RoomAt(
     return -1;
 }
 
+/*
+ * Is a WORLD position currently drawn inside a screen
+ * rectangle? The camera scrolls, so world positions must be
+ * converted to screen positions first.
+ */
+static bool Minimap_WorldPointUnder(
+    float world_x,
+    float world_y,
+    int margin)
+{
+    Vector2 screen =
+        GameCamera_WorldToScreen(world_x, world_y);
+
+    return screen.x >= (float)(panel_x - margin) &&
+           screen.x <= (float)(panel_x + MINIMAP_PANEL_WIDTH + margin) &&
+           screen.y >= (float)(panel_y - margin) &&
+           screen.y <= (float)(panel_y + MINIMAP_PANEL_HEIGHT + margin);
+}
+
+/*
+ * Is the player, a living enemy or an item drop under
+ * the minimap panel?
+ */
+static bool Minimap_SomethingUnder(int margin)
+{
+    Player *player =
+        Player_Get();
+
+    if (player != NULL &&
+        Minimap_WorldPointUnder(player->x, player->y, margin))
+    {
+        return true;
+    }
+
+    for (int i = 0; i < MAX_ENEMIES; i++)
+    {
+        const Enemy *enemy =
+            Enemy_Get(i);
+
+        if (enemy == NULL ||
+            !enemy->active ||
+            enemy->state == ENEMY_STATE_DEAD)
+        {
+            continue;
+        }
+
+        if (Minimap_WorldPointUnder(enemy->x, enemy->y, margin))
+            return true;
+    }
+
+    for (int i = 0; i < ITEM_DROP_MAX; i++)
+    {
+        const ItemDrop *drop =
+            ItemDrop_Get(i);
+
+        if (drop != NULL &&
+            Minimap_WorldPointUnder(drop->x, drop->y, margin))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void Minimap_Reset(void)
 {
     for (int y = 0; y < MAP_HEIGHT; y++)
@@ -82,6 +171,8 @@ void Minimap_Reset(void)
         for (int x = 0; x < MAP_WIDTH; x++)
             explored[y][x] = false;
     }
+
+    panel_alpha = 1.0f;
 
     Minimap_Update();
 }
@@ -183,15 +274,33 @@ void Minimap_Render(void)
     const Dungeon *dungeon =
         Game_GetDungeon();
 
-    const int panel_width =
-        MINIMAP_MAP_WIDTH + 16;
+    /*
+     * Fixed in the top-right corner, which is free of HUD.
+     */
+    panel_x =
+        GetScreenWidth() - MINIMAP_PANEL_WIDTH - 10;
 
-    const int panel_height =
-        MINIMAP_MAP_HEIGHT + 48;
+    panel_y = 8;
 
-    /* Directly under the player HUD panel (which ends at y = 72). */
-    const int panel_x = 4;
-    const int panel_y = 80;
+    /*
+     * Fade out while anything is under the panel, so the
+     * minimap never hides the action.
+     */
+    float target_alpha =
+        Minimap_SomethingUnder(MINIMAP_FADE_MARGIN)
+            ? MINIMAP_FADED_ALPHA
+            : 1.0f;
+
+    float blend =
+        GetFrameTime() * 8.0f;
+
+    if (blend > 1.0f)
+        blend = 1.0f;
+
+    panel_alpha +=
+        (target_alpha - panel_alpha) * blend;
+
+    float a = panel_alpha;
 
     const int map_x = panel_x + 8;
     const int map_y = panel_y + 22;
@@ -200,37 +309,40 @@ void Minimap_Render(void)
         {
             (float)panel_x,
             (float)panel_y,
-            (float)panel_width,
-            (float)panel_height};
+            (float)MINIMAP_PANEL_WIDTH,
+            (float)MINIMAP_PANEL_HEIGHT};
+
+    Color gold = (Color){255, 210, 60, 255};
+    Color dim = (Color){145, 153, 168, 255};
 
     DrawRectangleRounded(
         panel, 0.06f, 8,
-        (Color){7, 9, 13, 225});
+        Minimap_Tint((Color){7, 9, 13, 225}, a));
 
     DrawRectangleRoundedLinesEx(
         panel, 0.06f, 8, 1.0f,
-        Fade((Color){255, 210, 60, 255}, 0.75f));
+        Minimap_Tint(gold, a * 0.75f));
 
     UI_Text(
         "MAP",
         panel_x + 10,
         panel_y + 5,
         11,
-        (Color){255, 210, 60, 255});
+        Minimap_Tint(gold, a));
 
     UI_Text(
         "TAB",
-        panel_x + panel_width - 34,
+        panel_x + MINIMAP_PANEL_WIDTH - 34,
         panel_y + 6,
         9,
-        (Color){145, 153, 168, 255});
+        Minimap_Tint(dim, a));
 
     DrawRectangle(
         map_x,
         map_y,
         MINIMAP_MAP_WIDTH,
         MINIMAP_MAP_HEIGHT,
-        (Color){3, 4, 6, 255});
+        Minimap_Tint((Color){3, 4, 6, 255}, a));
 
     /*
      * Terrain: explored floor, and walls next to it.
@@ -265,7 +377,7 @@ void Minimap_Render(void)
                 DrawRectangle(
                     draw_x, draw_y,
                     MINIMAP_SCALE, MINIMAP_SCALE,
-                    color);
+                    Minimap_Tint(color, a));
 
                 continue;
             }
@@ -289,7 +401,7 @@ void Minimap_Render(void)
                 DrawRectangle(
                     draw_x, draw_y,
                     MINIMAP_SCALE, MINIMAP_SCALE,
-                    (Color){34, 34, 42, 255});
+                    Minimap_Tint((Color){34, 34, 42, 255}, a));
             }
         }
     }
@@ -317,7 +429,7 @@ void Minimap_Render(void)
             map_x + (int)(drop->x / TILE_SIZE * MINIMAP_SCALE),
             map_y + (int)(drop->y / TILE_SIZE * MINIMAP_SCALE),
             2.0f,
-            (Color){255, 205, 80, 255});
+            Minimap_Tint((Color){255, 205, 80, 255}, a));
     }
 
     /*
@@ -354,18 +466,18 @@ void Minimap_Render(void)
         {
             DrawCircle(
                 (int)dot_x, (int)dot_y,
-                4.0f, color);
+                3.5f, Minimap_Tint(color, a));
 
             DrawCircleLines(
                 (int)dot_x, (int)dot_y,
-                6.0f + sinf(time * 4.0f),
-                Fade(color, 0.9f));
+                5.5f + sinf(time * 4.0f),
+                Minimap_Tint(color, a * 0.9f));
         }
         else
         {
             DrawCircle(
                 (int)dot_x, (int)dot_y,
-                2.5f, color);
+                2.0f, Minimap_Tint(color, a));
         }
     }
 
@@ -386,20 +498,22 @@ void Minimap_Render(void)
         float pulse =
             (sinf(time * 6.0f) + 1.0f) * 0.5f;
 
+        Color blue = (Color){90, 200, 255, 255};
+
         DrawCircleLines(
             (int)dot_x, (int)dot_y,
-            4.0f + pulse * 2.0f,
-            Fade((Color){90, 200, 255, 255}, 0.6f));
+            3.5f + pulse * 2.0f,
+            Minimap_Tint(blue, a * 0.6f));
 
         DrawCircle(
             (int)dot_x, (int)dot_y,
-            3.0f,
-            (Color){90, 200, 255, 255});
+            2.5f,
+            Minimap_Tint(blue, a));
 
         DrawCircle(
             (int)dot_x, (int)dot_y,
-            1.2f,
-            WHITE);
+            1.0f,
+            Minimap_Tint(WHITE, a));
     }
 
     /*
@@ -413,7 +527,7 @@ void Minimap_Render(void)
         map_x,
         footer_y,
         10,
-        (Color){145, 153, 168, 255});
+        Minimap_Tint(dim, a));
 
     const char *left_text =
         TextFormat("%d", Enemy_GetCount());
@@ -423,8 +537,8 @@ void Minimap_Render(void)
 
     UI_Number(
         left_text,
-        panel_x + panel_width - 10 - left_width,
+        panel_x + MINIMAP_PANEL_WIDTH - 10 - left_width,
         footer_y,
         12,
-        WHITE);
+        Minimap_Tint(WHITE, a));
 }

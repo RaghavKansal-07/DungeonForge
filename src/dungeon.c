@@ -13,7 +13,7 @@
 
 #define ROOM_PADDING 1
 
-#define MAX_ROOM_ATTEMPTS 100
+#define MAX_ROOM_ATTEMPTS 400
 
 /*
  * Corridors are two tiles wide.
@@ -852,4 +852,132 @@ void Dungeon_Init(
      */
     Dungeon_ConnectRooms(
         dungeon);
+}
+
+/*
+ * Breadth-first search over the dungeon graph.
+ * distances[i] becomes the number of hops from from_room,
+ * or -1 if room i cannot be reached.
+ */
+static void Dungeon_ComputeDistances(
+    const Dungeon *dungeon,
+    int from_room,
+    int distances[MAX_DUNGEON_ROOMS])
+{
+    for (int i = 0; i < MAX_DUNGEON_ROOMS; i++)
+        distances[i] = -1;
+
+    if (dungeon == NULL ||
+        from_room < 0 ||
+        from_room >= dungeon->room_count)
+    {
+        return;
+    }
+
+    int queue[MAX_DUNGEON_ROOMS];
+
+    int head = 0;
+    int tail = 0;
+
+    distances[from_room] = 0;
+    queue[tail++] = from_room;
+
+    while (head < tail)
+    {
+        int current = queue[head++];
+
+        for (int i = 0;
+             i < dungeon->connection_count;
+             i++)
+        {
+            const DungeonConnection *connection =
+                &dungeon->connections[i];
+
+            int next = -1;
+
+            if (connection->room_a == current)
+                next = connection->room_b;
+            else if (connection->room_b == current)
+                next = connection->room_a;
+
+            if (next < 0 ||
+                next >= dungeon->room_count ||
+                distances[next] >= 0)
+            {
+                continue;
+            }
+
+            distances[next] =
+                distances[current] + 1;
+
+            queue[tail++] = next;
+        }
+    }
+}
+
+int Dungeon_GetRoomDistance(
+    const Dungeon *dungeon,
+    int from_room,
+    int to_room)
+{
+    if (dungeon == NULL ||
+        to_room < 0 ||
+        to_room >= dungeon->room_count)
+    {
+        return -1;
+    }
+
+    int distances[MAX_DUNGEON_ROOMS];
+
+    Dungeon_ComputeDistances(
+        dungeon,
+        from_room,
+        distances);
+
+    return distances[to_room];
+}
+
+int Dungeon_GetFarthestRoom(
+    const Dungeon *dungeon,
+    int from_room)
+{
+    if (dungeon == NULL ||
+        from_room < 0 ||
+        from_room >= dungeon->room_count)
+    {
+        return -1;
+    }
+
+    int distances[MAX_DUNGEON_ROOMS];
+
+    Dungeon_ComputeDistances(
+        dungeon,
+        from_room,
+        distances);
+
+    int best_room = from_room;
+    int best_hops = 0;
+    int best_straight = 0;
+
+    for (int i = 0; i < dungeon->room_count; i++)
+    {
+        if (distances[i] < 0)
+            continue;
+
+        int straight =
+            Dungeon_RoomDistanceSquared(
+                &dungeon->rooms[from_room],
+                &dungeon->rooms[i]);
+
+        if (distances[i] > best_hops ||
+            (distances[i] == best_hops &&
+             straight > best_straight))
+        {
+            best_room = i;
+            best_hops = distances[i];
+            best_straight = straight;
+        }
+    }
+
+    return best_room;
 }
