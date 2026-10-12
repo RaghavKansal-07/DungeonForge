@@ -2,10 +2,11 @@
 #define PLAYER_H
 
 #include <stdbool.h>
-
+#include "balance.h"
 #include "inventory.h"
 
-#define PLAYER_MAX_HEALTH 100
+#define PLAYER_MAX_HEALTH BAL_PLAYER_MAX_HEALTH
+
 #define PLAYER_RADIUS 20.0f
 
 typedef struct

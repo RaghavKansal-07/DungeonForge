@@ -1,9 +1,7 @@
 #include "inventory.h"
 
-
 void Inventory_Init(
-    Inventory *inventory
-)
+    Inventory *inventory)
 {
     if (inventory == NULL)
         return;
@@ -25,11 +23,9 @@ void Inventory_Init(
     }
 }
 
-
 int Inventory_FindItem(
     const Inventory *inventory,
-    int item_id
-)
+    int item_id)
 {
     if (inventory == NULL)
         return -1;
@@ -39,7 +35,7 @@ int Inventory_FindItem(
          i++)
     {
         if (inventory->items[i].type ==
-                ITEM_NONE)
+            ITEM_NONE)
         {
             continue;
         }
@@ -54,10 +50,8 @@ int Inventory_FindItem(
     return -1;
 }
 
-
 bool Inventory_IsFull(
-    const Inventory *inventory
-)
+    const Inventory *inventory)
 {
     if (inventory == NULL)
         return true;
@@ -66,13 +60,11 @@ bool Inventory_IsFull(
            INVENTORY_MAX_ITEMS;
 }
 
-
 bool Inventory_AddItem(
     Inventory *inventory,
     ItemType type,
     int item_id,
-    int quantity
-)
+    int quantity)
 {
     if (inventory == NULL)
         return false;
@@ -87,20 +79,38 @@ bool Inventory_AddItem(
         return false;
 
     /*
-     * If the item already exists,
-     * increase its quantity.
+     * Potions stack. Weapons and armor never do: you either
+     * own one or you do not.
+     */
+    int max_stack =
+        (type == ITEM_HEALTH_POTION)
+            ? INVENTORY_MAX_STACK
+            : 1;
+
+    /*
+     * A stack that is not larger than the cap can ever be built.
+     */
+    if (quantity > max_stack)
+        return false;
+
+    /*
+     * If the item already exists, increase its quantity,
+     * but never beyond the stack limit.
      */
     int existing_index =
         Inventory_FindItem(
             inventory,
-            item_id
-        );
+            item_id);
 
     if (existing_index >= 0)
     {
-        inventory->items[
-            existing_index
-        ].quantity += quantity;
+        if (inventory->items[existing_index].quantity + quantity >
+            max_stack)
+        {
+            return false;
+        }
+
+        inventory->items[existing_index].quantity += quantity;
 
         return true;
     }
@@ -136,12 +146,10 @@ bool Inventory_AddItem(
     return false;
 }
 
-
 bool Inventory_RemoveItem(
     Inventory *inventory,
     int item_id,
-    int quantity
-)
+    int quantity)
 {
     if (inventory == NULL)
         return false;
@@ -155,8 +163,7 @@ bool Inventory_RemoveItem(
     int index =
         Inventory_FindItem(
             inventory,
-            item_id
-        );
+            item_id);
 
     if (index < 0)
         return false;
@@ -192,11 +199,9 @@ bool Inventory_RemoveItem(
     return true;
 }
 
-
 int Inventory_GetQuantity(
     const Inventory *inventory,
-    int item_id
-)
+    int item_id)
 {
     if (inventory == NULL)
         return 0;
@@ -204,8 +209,7 @@ int Inventory_GetQuantity(
     int index =
         Inventory_FindItem(
             inventory,
-            item_id
-        );
+            item_id);
 
     if (index < 0)
         return 0;
