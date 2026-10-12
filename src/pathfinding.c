@@ -24,37 +24,44 @@ typedef struct
     bool closed;
 } PathNode;
 
-
 /*
  * ------------------------------------------------------------
  * Basic helpers
  * ------------------------------------------------------------
  */
 
+/*
+ * Octile distance: the exact cost of the cheapest route on an
+ * empty grid with 8-direction movement (straight = 1,
+ * diagonal = sqrt(2)). It never overestimates, so A* stays
+ * optimal, and it is tighter than straight-line distance, so
+ * A* explores fewer tiles.
+ */
 static float Heuristic(
     int x1,
     int y1,
     int x2,
-    int y2
-)
+    int y2)
 {
     float dx =
-        (float)(x2 - x1);
+        fabsf((float)(x2 - x1));
 
     float dy =
-        (float)(y2 - y1);
+        fabsf((float)(y2 - y1));
 
-    return sqrtf(
-        dx * dx +
-        dy * dy
-    );
+    float smaller =
+        dx < dy
+            ? dx
+            : dy;
+
+    return (dx + dy) +
+           (1.41421356f - 2.0f) *
+               smaller;
 }
-
 
 static bool IsValidTile(
     int x,
-    int y
-)
+    int y)
 {
     return x >= 0 &&
            x < MAP_WIDTH &&
@@ -62,11 +69,9 @@ static bool IsValidTile(
            y < MAP_HEIGHT;
 }
 
-
 static bool IsWalkable(
     int tile_x,
-    int tile_y
-)
+    int tile_y)
 {
     if (!IsValidTile(
             tile_x,
@@ -76,11 +81,9 @@ static bool IsWalkable(
     }
 
     return TileMap_GetTile(
-        tile_x,
-        tile_y
-    ) == TILE_FLOOR;
+               tile_x,
+               tile_y) == TILE_FLOOR;
 }
-
 
 /*
  * ------------------------------------------------------------
@@ -91,8 +94,7 @@ static bool IsWalkable(
 static float ClampFloat(
     float value,
     float min,
-    float max
-)
+    float max)
 {
     if (value < min)
         return min;
@@ -103,36 +105,30 @@ static float ClampFloat(
     return value;
 }
 
-
 static bool IsPositionSafe(
     float x,
     float y,
-    float radius
-)
+    float radius)
 {
     int min_tile_x =
         (int)floorf(
             (x - radius) /
-            TILE_SIZE
-        );
+            TILE_SIZE);
 
     int max_tile_x =
         (int)floorf(
             (x + radius) /
-            TILE_SIZE
-        );
+            TILE_SIZE);
 
     int min_tile_y =
         (int)floorf(
             (y - radius) /
-            TILE_SIZE
-        );
+            TILE_SIZE);
 
     int max_tile_y =
         (int)floorf(
             (y + radius) /
-            TILE_SIZE
-        );
+            TILE_SIZE);
 
     for (int tile_y = min_tile_y;
          tile_y <= max_tile_y;
@@ -165,15 +161,13 @@ static bool IsPositionSafe(
                 ClampFloat(
                     x,
                     wall_left,
-                    wall_right
-                );
+                    wall_right);
 
             float closest_y =
                 ClampFloat(
                     y,
                     wall_top,
-                    wall_bottom
-                );
+                    wall_bottom);
 
             float dx =
                 x - closest_x;
@@ -195,7 +189,6 @@ static bool IsPositionSafe(
 
     return true;
 }
-
 
 /*
  * ------------------------------------------------------------
@@ -226,8 +219,7 @@ static bool FindSafeWaypoint(
     float goal_x,
     float goal_y,
     float *result_x,
-    float *result_y
-)
+    float *result_y)
 {
     if (!IsValidTile(
             tile_x,
@@ -288,14 +280,13 @@ static bool FindSafeWaypoint(
      * corners, especially for the boss radius.
      */
     const float offsets[] =
-    {
-        -24.0f,
-        -16.0f,
-        -8.0f,
-         8.0f,
-        16.0f,
-        24.0f
-    };
+        {
+            -24.0f,
+            -16.0f,
+            -8.0f,
+            8.0f,
+            16.0f,
+            24.0f};
 
     const int offset_count =
         sizeof(offsets) /
@@ -331,12 +322,11 @@ static bool FindSafeWaypoint(
      * corridors.
      */
     static const int directions[4][2] =
-    {
-        {  1,  0 },
-        { -1,  0 },
-        {  0,  1 },
-        {  0, -1 }
-    };
+        {
+            {1, 0},
+            {-1, 0},
+            {0, 1},
+            {0, -1}};
 
     for (int i = 0;
          i < 4;
@@ -504,60 +494,105 @@ static bool FindSafeWaypoint(
     return found;
 }
 
-
 /*
  * ------------------------------------------------------------
  * A* node selection
  * ------------------------------------------------------------
  */
 
-static int FindLowestCostNode(
-    PathNode nodes[MAP_HEIGHT][MAP_WIDTH]
-)
+/*
+ * ------------------------------------------------------------
+ * Open list: binary min-heap
+ * ------------------------------------------------------------
+ *
+ * Entries are ordered by f cost. When a better route to a tile
+ * is found, a new entry is pushed instead of editing the old
+ * one. The stale entry is skipped when it is popped, because
+ * its tile is already closed.
+ *
+ * A tile can be improved at most once per neighbor (8), so the
+ * heap can never hold more than 8 entries per tile.
+ */
+
+typedef struct
 {
-    int best_x = -1;
-    int best_y = -1;
+    float f;
+    int index;
 
-    float best_f = INFINITY;
+} HeapEntry;
 
-    for (int y = 0;
-         y < MAP_HEIGHT;
-         y++)
+#define HEAP_CAPACITY (MAX_NODES * 8 + 1)
+
+static HeapEntry open_heap[HEAP_CAPACITY];
+static int heap_count = 0;
+
+static void Heap_Push(
+    float f,
+    int index)
+{
+    if (heap_count >= HEAP_CAPACITY)
+        return;
+
+    int i = heap_count++;
+
+    while (i > 0)
     {
-        for (int x = 0;
-         x < MAP_WIDTH;
-         x++)
-        {
-            PathNode *node =
-                &nodes[y][x];
+        int parent = (i - 1) / 2;
 
-            if (!node->opened ||
-                node->closed)
-            {
-                continue;
-            }
+        if (open_heap[parent].f <= f)
+            break;
 
-            if (node->f_cost < best_f)
-            {
-                best_f =
-                    node->f_cost;
+        open_heap[i] = open_heap[parent];
 
-                best_x =
-                    x;
-
-                best_y =
-                    y;
-            }
-        }
+        i = parent;
     }
 
-    if (best_x < 0)
-        return -1;
-
-    return best_y * MAP_WIDTH +
-           best_x;
+    open_heap[i].f = f;
+    open_heap[i].index = index;
 }
 
+static bool Heap_Pop(
+    HeapEntry *out)
+{
+    if (heap_count == 0)
+        return false;
+
+    *out = open_heap[0];
+
+    HeapEntry last =
+        open_heap[--heap_count];
+
+    if (heap_count == 0)
+        return true;
+
+    int i = 0;
+
+    while (true)
+    {
+        int child = i * 2 + 1;
+
+        if (child >= heap_count)
+            break;
+
+        if (child + 1 < heap_count &&
+            open_heap[child + 1].f <
+                open_heap[child].f)
+        {
+            child++;
+        }
+
+        if (open_heap[child].f >= last.f)
+            break;
+
+        open_heap[i] = open_heap[child];
+
+        i = child;
+    }
+
+    open_heap[i] = last;
+
+    return true;
+}
 
 /*
  * ------------------------------------------------------------
@@ -572,8 +607,7 @@ bool Pathfinding_FindNextStep(
     float goal_y,
     float radius,
     float *next_x,
-    float *next_y
-)
+    float *next_y)
 {
     if (next_x == NULL ||
         next_y == NULL)
@@ -587,26 +621,22 @@ bool Pathfinding_FindNextStep(
     int start_tile_x =
         (int)floorf(
             start_x /
-            TILE_SIZE
-        );
+            TILE_SIZE);
 
     int start_tile_y =
         (int)floorf(
             start_y /
-            TILE_SIZE
-        );
+            TILE_SIZE);
 
     int goal_tile_x =
         (int)floorf(
             goal_x /
-            TILE_SIZE
-        );
+            TILE_SIZE);
 
     int goal_tile_y =
         (int)floorf(
             goal_y /
-            TILE_SIZE
-        );
+            TILE_SIZE);
 
     /*
      * Validate start.
@@ -673,16 +703,12 @@ bool Pathfinding_FindNextStep(
                 }
 
                 float dx =
-                    (float)(
-                        x -
-                        goal_tile_x
-                    );
+                    (float)(x -
+                            goal_tile_x);
 
                 float dy =
-                    (float)(
-                        y -
-                        goal_tile_y
-                    );
+                    (float)(y -
+                            goal_tile_y);
 
                 float distance =
                     dx * dx +
@@ -744,18 +770,13 @@ bool Pathfinding_FindNextStep(
             goal_x,
             goal_y,
             next_x,
-            next_y
-        );
+            next_y);
     }
 
     /*
      * Allocate the A* grid on the stack.
      */
-    PathNode nodes[
-        MAP_HEIGHT
-    ][
-        MAP_WIDTH
-    ];
+    static PathNode nodes[MAP_HEIGHT][MAP_WIDTH];
 
     /*
      * Initialize all nodes.
@@ -801,11 +822,7 @@ bool Pathfinding_FindNextStep(
      * Initialize start node.
      */
     PathNode *start =
-        &nodes[
-            start_tile_y
-        ][
-            start_tile_x
-        ];
+        &nodes[start_tile_y][start_tile_x];
 
     start->g_cost =
         0.0f;
@@ -815,8 +832,7 @@ bool Pathfinding_FindNextStep(
             start_tile_x,
             start_tile_y,
             actual_goal_x,
-            actual_goal_y
-        );
+            actual_goal_y);
 
     start->f_cost =
         start->g_cost +
@@ -829,17 +845,16 @@ bool Pathfinding_FindNextStep(
      * 8-direction navigation.
      */
     static const int directions[8][2] =
-    {
-        {  1,  0 },
-        { -1,  0 },
-        {  0,  1 },
-        {  0, -1 },
+        {
+            {1, 0},
+            {-1, 0},
+            {0, 1},
+            {0, -1},
 
-        {  1,  1 },
-        { -1,  1 },
-        {  1, -1 },
-        { -1, -1 }
-    };
+            {1, 1},
+            {-1, 1},
+            {1, -1},
+            {-1, -1}};
 
     bool found =
         false;
@@ -847,32 +862,34 @@ bool Pathfinding_FindNextStep(
     /*
      * A* search.
      */
-    for (int iteration = 0;
-         iteration < MAX_NODES;
-         iteration++)
+    heap_count = 0;
+
+    Heap_Push(
+        start->f_cost,
+        start_tile_y * MAP_WIDTH +
+            start_tile_x);
+
+    HeapEntry entry;
+
+    while (Heap_Pop(&entry))
     {
-        int current_index =
-            FindLowestCostNode(
-                nodes
-            );
-
-        if (current_index < 0)
-            break;
-
         int current_x =
-            current_index %
+            entry.index %
             MAP_WIDTH;
 
         int current_y =
-            current_index /
+            entry.index /
             MAP_WIDTH;
 
         PathNode *current =
-            &nodes[
-                current_y
-            ][
-                current_x
-            ];
+            &nodes[current_y][current_x];
+
+        /*
+         * A stale duplicate: a better route to this tile
+         * was already processed.
+         */
+        if (current->closed)
+            continue;
 
         /*
          * Goal reached.
@@ -899,14 +916,10 @@ bool Pathfinding_FindNextStep(
              direction++)
         {
             int offset_x =
-                directions[
-                    direction
-                ][0];
+                directions[direction][0];
 
             int offset_y =
-                directions[
-                    direction
-                ][1];
+                directions[direction][1];
 
             int neighbor_x =
                 current_x +
@@ -954,11 +967,7 @@ bool Pathfinding_FindNextStep(
             }
 
             PathNode *neighbor =
-                &nodes[
-                    neighbor_y
-                ][
-                    neighbor_x
-                ];
+                &nodes[neighbor_y][neighbor_x];
 
             if (neighbor->closed)
                 continue;
@@ -991,8 +1000,7 @@ bool Pathfinding_FindNextStep(
                         neighbor_x,
                         neighbor_y,
                         actual_goal_x,
-                        actual_goal_y
-                    );
+                        actual_goal_y);
 
                 neighbor->f_cost =
                     neighbor->g_cost +
@@ -1000,6 +1008,18 @@ bool Pathfinding_FindNextStep(
 
                 neighbor->opened =
                     true;
+
+                neighbor->f_cost =
+                    neighbor->g_cost +
+                    neighbor->h_cost;
+
+                neighbor->opened =
+                    true;
+
+                Heap_Push(
+                    neighbor->f_cost,
+                    neighbor_y * MAP_WIDTH +
+                        neighbor_x);
             }
         }
     }
@@ -1031,11 +1051,7 @@ bool Pathfinding_FindNextStep(
                start_tile_y)
     {
         PathNode *current =
-            &nodes[
-                current_y
-            ][
-                current_x
-            ];
+            &nodes[current_y][current_x];
 
         previous_x =
             current_x;
@@ -1068,6 +1084,5 @@ bool Pathfinding_FindNextStep(
         goal_x,
         goal_y,
         next_x,
-        next_y
-    );
+        next_y);
 }
