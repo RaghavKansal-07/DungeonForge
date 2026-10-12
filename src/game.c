@@ -16,6 +16,10 @@
 #include "effects.h"
 #include "lighting.h"
 #include "minimap.h"
+#include <time.h>
+#include "gamecamera.h"
+#include "balance.h"
+#include "equipment.h"
 
 #include <stddef.h>
 #include <math.h>
@@ -34,6 +38,13 @@ static GameState game_state;
 
 /* Run statistics for the end screen. */
 static float run_time = 0.0f;
+
+/*
+ * How much the player is "in a fight": 0 when calm, 1 in combat.
+ * Drives the low-health warning.
+ */
+static float combat_intensity = 0.0f;
+
 static int run_start_enemies = 0;
 
 static bool quit_requested = false;
@@ -120,15 +131,61 @@ bool Game_ShouldQuit(void)
 
 /*
  * ============================================================
+ * DUNGEON GENERATION
+ * ============================================================
+ */
+
+#define MIN_DUNGEON_ROOMS 12
+#define MAX_SEED_ATTEMPTS 200
+
+/*
+ * A different seed for every run, even when two runs start
+ * within the same second.
+ */
+static unsigned int Game_NewSeed(void)
+{
+    static unsigned int counter = 0;
+
+    counter++;
+
+    unsigned int seed =
+        (unsigned int)time(NULL);
+
+    return seed * 2654435761u +
+           counter * 40503u +
+           0x9E3779B9u;
+}
+
+/*
+ * Generate a dungeon, trying following seeds until it has
+ * enough rooms. The seed that was finally used is stored in
+ * the dungeon, so a save can recreate the same map.
+ */
+static void Game_GenerateDungeon(unsigned int seed)
+{
+    for (int attempt = 0;
+         attempt < MAX_SEED_ATTEMPTS;
+         attempt++)
+    {
+        Dungeon_Init(
+            &dungeon,
+            seed + (unsigned int)attempt);
+
+        if (dungeon.room_count >= MIN_DUNGEON_ROOMS)
+            return;
+    }
+}
+
+/*
+ * ============================================================
  * START NEW RUN
  * ============================================================
  */
 
 static void Game_StartRun(void)
 {
-    Dungeon_Init(
-        &dungeon,
-        12345);
+    Game_GenerateDungeon(
+        Game_NewSeed());
 
     Player_Init();
 
@@ -160,7 +217,11 @@ static void Game_StartRun(void)
     run_start_enemies =
         Enemy_GetCount();
 
+    GameCamera_Reset();
+
     Minimap_Reset();
+
+    combat_intensity = 0.0f;
 
     game_state =
         GAME_STATE_PLAYING;
@@ -203,13 +264,79 @@ void Game_Init(void)
         GAME_STATE_MENU;
 }
 
+/*
+ * ============================================================
+ * COMBAT LEVEL
+ * ============================================================
+ *
+ * Rises when the player was just hit or an awake enemy is near,
+ * and fades slowly once the fight is over.
+ */
+
+#define COMBAT_ENGAGE_RANGE 420.0f
+
+static void Game_UpdateCombatIntensity(float dt)
+{
+    Player *player =
+        Player_Get();
+
+    bool in_combat = false;
+
+    if (player != NULL)
+    {
+        if (player->damage_timer > 0.0f)
+            in_combat = true;
+
+        for (int i = 0;
+             i < MAX_ENEMIES && !in_combat;
+             i++)
+        {
+            const Enemy *enemy =
+                Enemy_Get(i);
+
+            if (enemy == NULL ||
+                !enemy->active ||
+                enemy->state == ENEMY_STATE_DEAD ||
+                enemy->state == ENEMY_STATE_IDLE)
+            {
+                continue;
+            }
+
+            float dx = enemy->x - player->x;
+            float dy = enemy->y - player->y;
+
+            if (dx * dx + dy * dy <=
+                COMBAT_ENGAGE_RANGE * COMBAT_ENGAGE_RANGE)
+            {
+                in_combat = true;
+            }
+        }
+    }
+
+    float target =
+        in_combat ? 1.0f : 0.0f;
+
+    float rate =
+        (in_combat ? 6.0f : 0.7f) * dt;
+
+    if (rate > 1.0f)
+        rate = 1.0f;
+
+    combat_intensity +=
+        (target - combat_intensity) * rate;
+}
+
 static void Game_AfterLoad(void)
 {
     Events_Clear();
 
     Effects_Clear();
 
+    GameCamera_Reset();
+
     Minimap_Reset();
+
+    combat_intensity = 0.0f;
 
     run_time = 0.0f;
 
@@ -415,6 +542,8 @@ void Game_Update(void)
 
     Player_Update();
 
+    GameCamera_Update(frame_time);
+
     if (Player_IsDead())
     {
         game_state =
@@ -426,6 +555,8 @@ void Game_Update(void)
     }
 
     Enemy_Update();
+
+    Game_UpdateCombatIntensity(frame_time);
 
     if (Player_IsDead())
     {
@@ -447,8 +578,7 @@ void Game_Update(void)
      * Victory requires all enemies and item drops
      * to be cleared.
      */
-    if (Enemy_GetCount() == 0 &&
-        ItemDrop_GetCount() == 0)
+    if (Enemy_GetCount() == 0)
     {
         game_state =
             GAME_STATE_WON;
@@ -796,6 +926,60 @@ static void Game_RenderPlayerHUD(void)
 }
 
 /*
+ * One equipment slot: bright when owned, dim when not.
+ */
+static void Game_DrawEquipSlot(
+    const char *name,
+    const char *effect,
+    bool owned,
+    int x,
+    int y,
+    int width,
+    Color accent)
+{
+    Rectangle rect =
+        {
+            (float)x,
+            (float)y,
+            (float)width,
+            28.0f};
+
+    float strength =
+        owned
+            ? 1.0f
+            : 0.35f;
+
+    DrawRectangleRounded(
+        rect,
+        0.25f,
+        6,
+        Fade(accent, owned ? 0.16f : 0.05f));
+
+    DrawRectangleRoundedLinesEx(
+        rect,
+        0.25f,
+        6,
+        1.0f,
+        Fade(accent, 0.55f * strength));
+
+    UI_Text(
+        name,
+        x + 8,
+        y + 4,
+        9,
+        Fade(UI_TEXT, strength));
+
+    UI_Number(
+        owned
+            ? effect
+            : "---",
+        x + 8,
+        y + 15,
+        9,
+        Fade(accent, strength));
+}
+
+/*
  * ============================================================
  * INVENTORY HUD
  * ============================================================
@@ -820,7 +1004,7 @@ static void Game_RenderInventoryHUD(void)
         Game_GetScreenHeight();
 
     const int panel_width = 246;
-    const int panel_height = 76;
+    const int panel_height = 112;
 
     const int panel_x =
         screen_width -
@@ -855,7 +1039,7 @@ static void Game_RenderInventoryHUD(void)
 
     const char *capacity_text =
         TextFormat(
-            "%d / %d",
+            "SLOTS %d / %d",
             player->inventory.item_count,
             INVENTORY_MAX_ITEMS);
 
@@ -964,6 +1148,33 @@ static void Game_RenderInventoryHUD(void)
         31,
         20,
         UI_GOLD);
+
+    /*
+     * --------------------------------------------------------
+     * EQUIPMENT
+     * --------------------------------------------------------
+     */
+    Game_DrawEquipSlot(
+        "IRON SWORD",
+        TextFormat(
+            "+%d DAMAGE",
+            BAL_SWORD_DAMAGE_BONUS),
+        Equipment_HasSword(&player->inventory),
+        panel_x + 12,
+        panel_y + 74,
+        106,
+        (Color){255, 150, 60, 255});
+
+    Game_DrawEquipSlot(
+        "IRON ARMOR",
+        TextFormat(
+            "-%d%% DAMAGE",
+            BAL_ARMOR_REDUCTION_PERCENT),
+        Equipment_HasArmor(&player->inventory),
+        panel_x + 128,
+        panel_y + 74,
+        106,
+        (Color){90, 200, 255, 255});
 }
 
 /*
@@ -1491,7 +1702,7 @@ static void Game_RenderEndScreen(void)
 
     Game_DrawCenteredText(
         victory
-            ? "All enemies and world drops have been cleared."
+            ? "Every enemy in the dungeon has been defeated."
             : "Your run has come to an end.",
         center_x,
         panel_y + 76,
@@ -1675,6 +1886,31 @@ static void Game_RenderEndScreen(void)
             UI_GOLD);
     }
 
+    FightStyle style =
+        Behavior_GetFightStyle();
+
+    if (style != FIGHT_STYLE_UNKNOWN)
+    {
+        const char *style_text;
+
+        if (style == FIGHT_STYLE_CLOSE)
+            style_text = "You fight up close";
+        else if (style == FIGHT_STYLE_MID)
+            style_text = "You fight at mid range";
+        else
+            style_text = "You fight at the edge of your reach";
+
+        Game_DrawCenteredText(
+            TextFormat(
+                "%s (%.0f%% of your attacks)",
+                style_text,
+                Behavior_GetFightStyleShare() * 100.0f),
+            center_x,
+            panel_y + 310,
+            14,
+            UI_TEXT);
+    }
+
     DrawLine(
         panel_x + 40,
         panel_y + 332,
@@ -1707,6 +1943,23 @@ static void Game_RenderEndScreen(void)
         button_width,
         42,
         UI_GOLD);
+
+    const char *seed_text =
+        TextFormat(
+            "SEED %08X",
+            dungeon.seed);
+
+    int seed_width =
+        UI_NumberWidth(
+            seed_text,
+            10);
+
+    UI_Number(
+        seed_text,
+        center_x - seed_width / 2,
+        panel_y + 402,
+        10,
+        UI_TEXT_DIM);
 
     Game_DrawCenteredText(
         "DUNGEONFORGE",
@@ -1829,7 +2082,7 @@ static void Game_RenderMenu(void)
     }
 
     Game_DrawCenteredText(
-        "WASD MOVE     SHIFT DODGE     SPACE ATTACK     H POTION     ESC PAUSE",
+        "WASD MOVE     MOUSE AIM     CLICK OR SPACE ATTACK     SHIFT DODGE     H POTION     ESC PAUSE",
         center_x,
         screen_height - 60,
         12,
@@ -1931,16 +2184,16 @@ static void Game_RenderPauseScreen(void)
  * ============================================================
  * DUNGEON GRAPH DEBUG
  * ============================================================
+ *
+ * The world part is drawn through the camera. The panel is
+ * drawn in screen space so it does not scroll.
  */
 
-static void Game_RenderDungeonGraphDebug(void)
+static void Game_RenderDungeonGraphWorld(void)
 {
     if (!dungeon_debug_enabled)
         return;
 
-    /*
-     * Draw graph connections.
-     */
     for (int i = 0;
          i < dungeon.connection_count;
          i++)
@@ -1949,15 +2202,9 @@ static void Game_RenderDungeonGraphDebug(void)
             &dungeon.connections[i];
 
         if (connection->room_a < 0 ||
-            connection->room_a >=
-                dungeon.room_count)
-        {
-            continue;
-        }
-
-        if (connection->room_b < 0 ||
-            connection->room_b >=
-                dungeon.room_count)
+            connection->room_a >= dungeon.room_count ||
+            connection->room_b < 0 ||
+            connection->room_b >= dungeon.room_count)
         {
             continue;
         }
@@ -1968,36 +2215,17 @@ static void Game_RenderDungeonGraphDebug(void)
         DungeonRoom *room_b =
             &dungeon.rooms[connection->room_b];
 
-        float x1 =
-            room_a->center_x *
-                TILE_SIZE +
-            TILE_SIZE * 0.5f;
-
-        float y1 =
-            room_a->center_y *
-                TILE_SIZE +
-            TILE_SIZE * 0.5f;
-
-        float x2 =
-            room_b->center_x *
-                TILE_SIZE +
-            TILE_SIZE * 0.5f;
-
-        float y2 =
-            room_b->center_y *
-                TILE_SIZE +
-            TILE_SIZE * 0.5f;
-
         DrawLineEx(
-            (Vector2){x1, y1},
-            (Vector2){x2, y2},
+            (Vector2){
+                room_a->center_x * TILE_SIZE + TILE_SIZE * 0.5f,
+                room_a->center_y * TILE_SIZE + TILE_SIZE * 0.5f},
+            (Vector2){
+                room_b->center_x * TILE_SIZE + TILE_SIZE * 0.5f,
+                room_b->center_y * TILE_SIZE + TILE_SIZE * 0.5f},
             3.0f,
             YELLOW);
     }
 
-    /*
-     * Draw room centers.
-     */
     for (int i = 0;
          i < dungeon.room_count;
          i++)
@@ -2006,14 +2234,10 @@ static void Game_RenderDungeonGraphDebug(void)
             &dungeon.rooms[i];
 
         float center_x =
-            room->center_x *
-                TILE_SIZE +
-            TILE_SIZE * 0.5f;
+            room->center_x * TILE_SIZE + TILE_SIZE * 0.5f;
 
         float center_y =
-            room->center_y *
-                TILE_SIZE +
-            TILE_SIZE * 0.5f;
+            room->center_y * TILE_SIZE + TILE_SIZE * 0.5f;
 
         DrawCircle(
             (int)center_x,
@@ -2022,18 +2246,19 @@ static void Game_RenderDungeonGraphDebug(void)
             ORANGE);
 
         UI_Text(
-            TextFormat(
-                "R%d",
-                i),
+            TextFormat("R%d", i),
             (int)center_x + 8,
             (int)center_y - 8,
             14,
             WHITE);
     }
+}
 
-    /*
-     * Debug statistics panel.
-     */
+static void Game_RenderDungeonGraphPanel(void)
+{
+    if (!dungeon_debug_enabled)
+        return;
+
     Game_DrawPanel(
         190,
         88,
@@ -2064,9 +2289,14 @@ static void Game_RenderDungeonGraphDebug(void)
  * ============================================================
  * A* PATHFINDING DEBUG
  * ============================================================
+ *
+ * Only enemies near the player are tested, to keep this
+ * overlay light on the large map.
  */
 
-static void Game_RenderPathfindingDebug(void)
+#define PATH_DEBUG_RANGE 700.0f
+
+static void Game_RenderPathfindingWorld(void)
 {
     if (!pathfinding_debug_enabled)
         return;
@@ -2077,35 +2307,8 @@ static void Game_RenderPathfindingDebug(void)
     if (player == NULL)
         return;
 
-    /*
-     * Debug panel.
-     */
-    Game_DrawPanel(
-        190,
-        154,
-        300,
-        58,
-        UI_CYAN);
-
-    UI_Text(
-        "A* PATHFINDING DEBUG",
-        200,
-        164,
-        15,
-        UI_CYAN);
-
-    UI_Text(
-        "Next waypoint for each enemy",
-        200,
-        186,
-        13,
-        WHITE);
-
-    /*
-     * Test A* for every active enemy.
-     */
     for (int i = 0;
-         i < Enemy_GetCount();
+         i < MAX_ENEMIES;
          i++)
     {
         Enemy *enemy =
@@ -2113,6 +2316,15 @@ static void Game_RenderPathfindingDebug(void)
 
         if (enemy == NULL ||
             !enemy->active)
+        {
+            continue;
+        }
+
+        float dx = enemy->x - player->x;
+        float dy = enemy->y - player->y;
+
+        if (dx * dx + dy * dy >
+            PATH_DEBUG_RANGE * PATH_DEBUG_RANGE)
         {
             continue;
         }
@@ -2139,9 +2351,7 @@ static void Game_RenderPathfindingDebug(void)
                 MAROON);
 
             UI_Text(
-                TextFormat(
-                    "NO PATH E%d",
-                    i),
+                TextFormat("NO PATH E%d", i),
                 (int)enemy->x + 20,
                 (int)enemy->y - 25,
                 12,
@@ -2151,12 +2361,8 @@ static void Game_RenderPathfindingDebug(void)
         }
 
         DrawLineEx(
-            (Vector2){
-                enemy->x,
-                enemy->y},
-            (Vector2){
-                next_x,
-                next_y},
+            (Vector2){enemy->x, enemy->y},
+            (Vector2){next_x, next_y},
             3.0f,
             SKYBLUE);
 
@@ -2167,24 +2373,45 @@ static void Game_RenderPathfindingDebug(void)
             SKYBLUE);
 
         UI_Text(
-            TextFormat(
-                "E%d A*",
-                i),
+            TextFormat("E%d A*", i),
             (int)enemy->x + 20,
             (int)enemy->y + 10,
             12,
             SKYBLUE);
 
         DrawLineEx(
-            (Vector2){
-                enemy->x,
-                enemy->y},
-            (Vector2){
-                player->x,
-                player->y},
+            (Vector2){enemy->x, enemy->y},
+            (Vector2){player->x, player->y},
             1.0f,
             Fade(RED, 0.35f));
     }
+}
+
+static void Game_RenderPathfindingPanel(void)
+{
+    if (!pathfinding_debug_enabled)
+        return;
+
+    Game_DrawPanel(
+        190,
+        154,
+        300,
+        58,
+        UI_CYAN);
+
+    UI_Text(
+        "A* PATHFINDING DEBUG",
+        200,
+        164,
+        15,
+        UI_CYAN);
+
+    UI_Text(
+        "Next waypoint for enemies near you",
+        200,
+        186,
+        13,
+        WHITE);
 }
 
 /*
@@ -2286,6 +2513,15 @@ static void Game_RenderDebugFooter(void)
         334,
         footer_y + 11,
         9,
+        UI_TEXT_DIM);
+
+    UI_Number(
+        TextFormat(
+            "SEED %08X",
+            dungeon.seed),
+        420,
+        footer_y + 11,
+        10,
         UI_TEXT_DIM);
 
     /*
@@ -2432,7 +2668,8 @@ static void Game_RenderLowHealthWarning(void)
 
     if (player == NULL ||
         player->dead ||
-        player->health > LOW_HEALTH_THRESHOLD)
+        player->health > LOW_HEALTH_THRESHOLD ||
+        combat_intensity < 0.01f)
     {
         return;
     }
@@ -2448,9 +2685,14 @@ static void Game_RenderLowHealthWarning(void)
          1.0f) *
         0.5f;
 
+    /*
+     * Strongest when health is low AND the player is
+     * in a fight.
+     */
     float alpha =
         (0.18f + 0.30f * severity) *
-        (0.5f + 0.5f * pulse);
+        (0.5f + 0.5f * pulse) *
+        combat_intensity;
 
     Color edge = (Color){220, 30, 40, 0};
     Color clear = edge;
@@ -2468,6 +2710,31 @@ static void Game_RenderLowHealthWarning(void)
 }
 
 /*
+ * Crosshair drawn where the player is aiming.
+ */
+static void Game_RenderCrosshair(void)
+{
+    Vector2 mouse =
+        GetMousePosition();
+
+    int x = (int)mouse.x;
+    int y = (int)mouse.y;
+
+    Color color = Fade(WHITE, 0.92f);
+    Color shadow = Fade(BLACK, 0.70f);
+
+    DrawCircleLines(x + 1, y + 1, 9.0f, shadow);
+    DrawCircleLines(x, y, 9.0f, color);
+
+    DrawLine(x - 15, y, x - 6, y, color);
+    DrawLine(x + 6, y, x + 15, y, color);
+    DrawLine(x, y - 15, x, y - 6, color);
+    DrawLine(x, y + 6, x, y + 15, color);
+
+    DrawCircle(x, y, 2.0f, color);
+}
+
+/*
  * ============================================================
  * GAME RENDER
  * ============================================================
@@ -2482,18 +2749,33 @@ void Game_Render(void)
     /*
      * World, drawn through a camera so the screen can shake.
      */
-    Camera2D camera = {0};
-
-    camera.offset = Effects_GetShake();
-    camera.zoom = 1.0f;
+    Camera2D camera =
+        GameCamera_Get();
 
     BeginMode2D(camera);
 
-    TileMap_Render();
+    {
+        int min_x;
+        int min_y;
+        int max_x;
+        int max_y;
 
-    Game_RenderDungeonGraphDebug();
+        GameCamera_GetVisibleTiles(
+            &min_x,
+            &min_y,
+            &max_x,
+            &max_y);
 
-    Game_RenderPathfindingDebug();
+        TileMap_RenderRegion(
+            min_x,
+            min_y,
+            max_x,
+            max_y);
+    }
+
+    Game_RenderDungeonGraphWorld();
+
+    Game_RenderPathfindingWorld();
 
     ItemDrop_Render();
 
@@ -2516,6 +2798,10 @@ void Game_Render(void)
             GAME_STATE_PAUSED)
     {
         Game_RenderLowHealthWarning();
+
+        Game_RenderDungeonGraphPanel();
+
+        Game_RenderPathfindingPanel();
 
         Game_RenderPlayerHUD();
 
@@ -2549,6 +2835,27 @@ void Game_Render(void)
         GAME_STATE_MENU)
     {
         Game_RenderMenu();
+    }
+
+    {
+        static bool cursor_hidden = false;
+
+        bool aiming =
+            (game_state == GAME_STATE_PLAYING);
+
+        if (aiming && !cursor_hidden)
+        {
+            HideCursor();
+            cursor_hidden = true;
+        }
+        else if (!aiming && cursor_hidden)
+        {
+            ShowCursor();
+            cursor_hidden = false;
+        }
+
+        if (aiming)
+            Game_RenderCrosshair();
     }
 
     EndDrawing();

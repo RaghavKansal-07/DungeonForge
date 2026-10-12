@@ -30,7 +30,7 @@
  * Increase this whenever the save-file
  * format changes incompatibly.
  */
-#define SAVE_VERSION 5u
+#define SAVE_VERSION 7u
 
 /*
  * Maximum number of item drops that can
@@ -267,9 +267,14 @@ static bool Save_InventoryValid(const Inventory *inventory)
             continue;
         }
 
+        int max_quantity =
+            item->type == ITEM_HEALTH_POTION
+                ? INVENTORY_MAX_STACK
+                : 1;
+
         if (!Items_IsValid((ItemId)item->item_id) ||
             item->quantity < 1 ||
-            item->quantity > SAVE_MAX_QUANTITY)
+            item->quantity > max_quantity)
         {
             return false;
         }

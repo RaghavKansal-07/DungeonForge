@@ -34,7 +34,11 @@ SRC = src/main.c \
       src/ui.c \
       src/effects.c \
       src/lighting.c \
-      src/minimap.c
+      src/minimap.c \
+      src/gamecamera.c \
+      src/attack_cone.c \
+      src/windup.c \
+      src/equipment.c
 
 
 # ---------------------------------------------------------
@@ -103,6 +107,81 @@ TEST_PATHFINDING_SRC = tests/test_pathfinding.c \
 
 
 # ---------------------------------------------------------
+# Dungeon Tests
+# ---------------------------------------------------------
+
+TEST_DUNGEON = tests/test_dungeon.exe
+
+TEST_DUNGEON_SRC = tests/test_dungeon.c \
+                   src/dungeon.c \
+                   src/tilemap.c \
+                   src/rng.c
+
+
+# ---------------------------------------------------------
+# Attack Cone Tests
+# ---------------------------------------------------------
+
+TEST_ATTACK_CONE = tests/test_attack_cone.exe
+
+TEST_ATTACK_CONE_SRC = tests/test_attack_cone.c \
+                       src/attack_cone.c
+
+
+# ---------------------------------------------------------
+# Wind-up Tests
+# ---------------------------------------------------------
+
+TEST_WINDUP = tests/test_windup.exe
+
+TEST_WINDUP_SRC = tests/test_windup.c \
+                  src/windup.c
+
+
+# ---------------------------------------------------------
+# Balance Tests
+# ---------------------------------------------------------
+
+TEST_BALANCE = tests/test_balance.exe
+
+TEST_BALANCE_SRC = tests/test_balance.c
+
+
+# ---------------------------------------------------------
+# Inventory Tests
+# ---------------------------------------------------------
+
+TEST_INVENTORY = tests/test_inventory.exe
+
+TEST_INVENTORY_SRC = tests/test_inventory.c \
+                     src/inventory.c
+
+
+# ---------------------------------------------------------
+# Equipment Tests
+# ---------------------------------------------------------
+
+TEST_EQUIPMENT = tests/test_equipment.exe
+
+TEST_EQUIPMENT_SRC = tests/test_equipment.c \
+                     src/equipment.c \
+                     src/inventory.c
+
+
+# ---------------------------------------------------------
+# Fight Style Tests
+# ---------------------------------------------------------
+
+TEST_FIGHT_STYLE = tests/test_fight_style.exe
+
+TEST_FIGHT_STYLE_SRC = tests/test_fight_style.c \
+                       src/behavior.c \
+                       src/events.c \
+                       src/adaptive_ai.c \
+                       src/rng.c
+
+
+# ---------------------------------------------------------
 # Default target
 # ---------------------------------------------------------
 
@@ -168,16 +247,79 @@ $(TEST_PATHFINDING): $(TEST_PATHFINDING_SRC)
 
 
 # ---------------------------------------------------------
+# Dungeon Test
+# ---------------------------------------------------------
+
+$(TEST_DUNGEON): $(TEST_DUNGEON_SRC)
+	$(CC) $(CFLAGS) $(INCLUDES) $(TEST_DUNGEON_SRC) $(LDFLAGS) $(LIBS) -o $(TEST_DUNGEON) -lm
+
+
+# ---------------------------------------------------------
+# Attack Cone Test
+# ---------------------------------------------------------
+
+$(TEST_ATTACK_CONE): $(TEST_ATTACK_CONE_SRC)
+	$(CC) $(CFLAGS) -Iinclude $(TEST_ATTACK_CONE_SRC) -o $(TEST_ATTACK_CONE) -lm
+
+
+# ---------------------------------------------------------
+# Wind-up Test
+# ---------------------------------------------------------
+
+$(TEST_WINDUP): $(TEST_WINDUP_SRC)
+	$(CC) $(CFLAGS) -Iinclude $(TEST_WINDUP_SRC) -o $(TEST_WINDUP)
+
+
+# ---------------------------------------------------------
+# Balance Test
+# ---------------------------------------------------------
+
+$(TEST_BALANCE): $(TEST_BALANCE_SRC)
+	$(CC) $(CFLAGS) -Iinclude $(TEST_BALANCE_SRC) -o $(TEST_BALANCE)
+
+
+# ---------------------------------------------------------
+# Inventory Test
+# ---------------------------------------------------------
+
+$(TEST_INVENTORY): $(TEST_INVENTORY_SRC)
+	$(CC) $(CFLAGS) -Iinclude $(TEST_INVENTORY_SRC) -o $(TEST_INVENTORY)
+
+
+# ---------------------------------------------------------
+# Equipment Test
+# ---------------------------------------------------------
+
+$(TEST_EQUIPMENT): $(TEST_EQUIPMENT_SRC)
+	$(CC) $(CFLAGS) -Iinclude $(TEST_EQUIPMENT_SRC) -o $(TEST_EQUIPMENT)
+
+
+# ---------------------------------------------------------
+# Fight Style Test
+# ---------------------------------------------------------
+
+$(TEST_FIGHT_STYLE): $(TEST_FIGHT_STYLE_SRC)
+	$(CC) $(CFLAGS) -Iinclude $(TEST_FIGHT_STYLE_SRC) -o $(TEST_FIGHT_STYLE) -lm
+
+
+# ---------------------------------------------------------
 # Run All Tests
 # ---------------------------------------------------------
 
-test: $(TEST_BEHAVIOR) $(TEST_EVENTS) $(TEST_ADAPTIVE_AI) $(TEST_RNG) $(TEST_SERIALIZATION) $(TEST_PATHFINDING)
+test: $(TEST_BEHAVIOR) $(TEST_EVENTS) $(TEST_ADAPTIVE_AI) $(TEST_RNG) $(TEST_SERIALIZATION) $(TEST_PATHFINDING) $(TEST_DUNGEON) $(TEST_ATTACK_CONE) $(TEST_WINDUP) $(TEST_BALANCE) $(TEST_INVENTORY) $(TEST_EQUIPMENT) $(TEST_FIGHT_STYLE)
 	./$(TEST_BEHAVIOR)
 	./$(TEST_EVENTS)
 	./$(TEST_ADAPTIVE_AI)
 	./$(TEST_RNG)
 	./$(TEST_SERIALIZATION)
 	./$(TEST_PATHFINDING)
+	./$(TEST_DUNGEON)
+	./$(TEST_ATTACK_CONE)
+	./$(TEST_WINDUP)
+	./$(TEST_BALANCE)
+	./$(TEST_INVENTORY)
+	./$(TEST_EQUIPMENT)
+	./$(TEST_FIGHT_STYLE)
 
 
 # ---------------------------------------------------------
@@ -192,4 +334,11 @@ clean:
 	rm -f $(TEST_RNG)
 	rm -f $(TEST_SERIALIZATION)
 	rm -f $(TEST_PATHFINDING)
+	rm -f $(TEST_DUNGEON)
+	rm -f $(TEST_ATTACK_CONE)
+	rm -f $(TEST_WINDUP)
+	rm -f $(TEST_BALANCE)
+	rm -f $(TEST_INVENTORY)
+	rm -f $(TEST_EQUIPMENT)
+	rm -f $(TEST_FIGHT_STYLE)
 	rm -f tests/test_serialization.dat

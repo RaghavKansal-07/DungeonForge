@@ -8,6 +8,9 @@
 #include "audio.h"
 #include "ui.h"
 #include "effects.h"
+#include "gamecamera.h"
+#include "balance.h"
+#include "equipment.h"
 
 #include <math.h>
 
@@ -28,6 +31,23 @@ static MoveDirection last_event_move_y = MOVE_NONE;
  */
 static float dodge_ready_flash = 0.0f;
 
+/*
+ * Direction the player aims (toward the mouse).
+ */
+static float aim_x = 1.0f;
+static float aim_y = 0.0f;
+
+/*
+ * Time until the next potion can be drunk.
+ */
+static float potion_cooldown = 0.0f;
+
+/*
+ * Direction of the swing currently being drawn.
+ */
+static float swing_x = 1.0f;
+static float swing_y = 0.0f;
+
 static void Player_PushMoveEvent(
     MoveDirection direction,
     float value)
@@ -44,7 +64,7 @@ static void Player_PushMoveEvent(
     Events_Push(event);
 }
 
-#define HEALTH_POTION_HEAL 25
+#define HEALTH_POTION_HEAL BAL_PLAYER_POTION_HEAL
 
 /*
  * ---------------------------------------------------------
@@ -55,7 +75,6 @@ static void Player_PushMoveEvent(
  *
  * Keep these values visually aligned with combat.c.
  */
-#define PLAYER_ATTACK_RANGE 55.0f
 
 /*
  * ---------------------------------------------------------
@@ -120,7 +139,10 @@ void Player_Init(void)
 
     player.health = PLAYER_MAX_HEALTH;
 
-    player.attack_cooldown = 0.35f;
+    player.attack_cooldown = BAL_PLAYER_ATTACK_COOLDOWN;
+
+    potion_cooldown = 0.0f;
+
     player.attack_timer = 0.0f;
 
     player.damage_timer = 0.0f;
@@ -162,6 +184,10 @@ void Player_Init(void)
      */
     move_event_timer = 0.0f;
     dodge_ready_flash = 0.0f;
+    aim_x = 1.0f;
+    aim_y = 0.0f;
+    swing_x = 1.0f;
+    swing_y = 0.0f;
     last_event_move_x = MOVE_NONE;
     last_event_move_y = MOVE_NONE;
 }
@@ -193,6 +219,32 @@ void Player_Update(void)
 
     float dt =
         GetFrameTime();
+
+    /*
+     * -----------------------------------------------------
+     * Aim
+     * -----------------------------------------------------
+     *
+     * The player faces the mouse. The aim is kept when the
+     * cursor is right on top of the player.
+     */
+    {
+        Vector2 mouse_world =
+            GameCamera_ScreenToWorld(
+                GetMousePosition());
+
+        float aim_dx = mouse_world.x - player.x;
+        float aim_dy = mouse_world.y - player.y;
+
+        float aim_length =
+            sqrtf(aim_dx * aim_dx + aim_dy * aim_dy);
+
+        if (aim_length > 6.0f)
+        {
+            aim_x = aim_dx / aim_length;
+            aim_y = aim_dy / aim_length;
+        }
+    }
 
     /*
      * Limit the time step so a frame hitch cannot
@@ -476,14 +528,29 @@ void Player_Update(void)
          * -------------------------------------------------
          */
 
+        /*
+         * Swinging a weapon slows the player down briefly.
+         */
+        float speed_scale = 1.0f;
+
+        if (player.attack_timer >
+            player.attack_cooldown -
+                BAL_PLAYER_SWING_TIME)
+        {
+            speed_scale =
+                BAL_PLAYER_SWING_MOVE_SCALE;
+        }
+
         float move_x =
             direction_x *
             player.speed *
+            speed_scale *
             dt;
 
         float move_y =
             direction_y *
             player.speed *
+            speed_scale *
             dt;
 
         /*
@@ -583,7 +650,11 @@ void Player_Update(void)
      * -----------------------------------------------------
      */
 
+    if (potion_cooldown > 0.0f)
+        potion_cooldown -= dt;
+
     if (IsKeyPressed(KEY_H) &&
+        potion_cooldown <= 0.0f &&
         player.health < PLAYER_MAX_HEALTH)
     {
         int potion_quantity =
@@ -640,6 +711,9 @@ void Player_Update(void)
                 Events_Push(
                     heal_event);
 
+                potion_cooldown =
+                    BAL_PLAYER_POTION_COOLDOWN;
+
                 Effects_SpawnNumber(
                     player.x,
                     player.y - PLAYER_RADIUS - 28.0f,
@@ -656,7 +730,8 @@ void Player_Update(void)
      * -----------------------------------------------------
      */
 
-    if (IsKeyPressed(KEY_SPACE) &&
+    if ((IsKeyPressed(KEY_SPACE) ||
+         IsMouseButtonDown(MOUSE_BUTTON_LEFT)) &&
         player.attack_timer <= 0.0f)
     {
         player.attack_timer =
@@ -677,8 +752,13 @@ void Player_Update(void)
         attack_event.move_direction =
             MOVE_NONE;
 
+        /*
+         * Distance to the nearest enemy, so the behavior
+         * profile can learn how the player fights.
+         */
         attack_event.value =
-            1.0f;
+            Combat_GetNearestEnemyDistance(
+                COMBAT_MEASURE_RANGE);
 
         attack_event.x =
             player.x;
@@ -695,8 +775,157 @@ void Player_Update(void)
          */
         Audio_PlayPlayerAttack();
 
-        Combat_PlayerAttack();
+        swing_x = aim_x;
+        swing_y = aim_y;
+
+        Combat_PlayerAttack(
+            aim_x,
+            aim_y);
     }
+}
+
+/*
+ * Weapon marker on the player's body, pointing where the
+ * player aims.
+ */
+static void Player_RenderFacingMarker(void)
+{
+    float dx = aim_x;
+    float dy = aim_y;
+
+    /* Perpendicular, used for the width of the tip. */
+    float px = -dy;
+    float py = dx;
+
+    DrawLineEx(
+        (Vector2){
+            player.x + dx * 12.0f,
+            player.y + dy * 12.0f},
+        (Vector2){
+            player.x + dx * 19.0f,
+            player.y + dy * 19.0f},
+        5.0f,
+        Fade(BLACK, 0.35f));
+
+    DrawCircle(
+        (int)(player.x + dx * 11.0f),
+        (int)(player.y + dy * 11.0f),
+        4.5f,
+        PLAYER_COLOR_LIGHT);
+
+    DrawTriangle(
+        (Vector2){
+            player.x + dx * 18.0f,
+            player.y + dy * 18.0f},
+        (Vector2){
+            player.x + dx * 13.0f - px * 3.5f,
+            player.y + dy * 13.0f - py * 3.5f},
+        (Vector2){
+            player.x + dx * 13.0f + px * 3.5f,
+            player.y + dy * 13.0f + py * 3.5f},
+        WHITE);
+}
+
+/*
+ * The melee swing: an arc matching the real hit cone, with a
+ * bright edge that sweeps across it.
+ *
+ * Lasts for the first 0.12 seconds of the attack cooldown.
+ * Purely visual: Combat_PlayerAttack() decides the hits.
+ */
+static void Player_RenderAttackSwing(void)
+{
+    const float swing_duration = 0.12f;
+
+    float swing_start =
+        player.attack_cooldown - swing_duration;
+
+    if (player.attack_timer <= swing_start)
+        return;
+
+    float progress =
+        1.0f -
+        (player.attack_timer - swing_start) /
+            swing_duration;
+
+    if (progress < 0.0f)
+        progress = 0.0f;
+
+    if (progress > 1.0f)
+        progress = 1.0f;
+
+    float center_angle =
+        atan2f(swing_y, swing_x) * RAD2DEG;
+
+    float half_angle =
+        PLAYER_ATTACK_HALF_ANGLE_DEGREES;
+
+    Vector2 center = {player.x, player.y};
+
+    float outer =
+        PLAYER_ATTACK_RANGE * (0.72f + 0.28f * progress);
+
+    float inner =
+        outer - 14.0f;
+
+    float fade =
+        1.0f - 0.5f * progress;
+
+    /* Soft glow behind the arc. */
+    DrawRing(
+        center,
+        inner - 2.0f,
+        outer + 3.0f,
+        center_angle - half_angle,
+        center_angle + half_angle,
+        24,
+        Fade(PLAYER_ATTACK_GLOW, 0.25f * fade));
+
+    /* Main arc. */
+    DrawRing(
+        center,
+        inner,
+        outer,
+        center_angle - half_angle,
+        center_angle + half_angle,
+        24,
+        Fade(PLAYER_ATTACK_COLOR, 0.9f * fade));
+
+    /* Bright inner edge. */
+    DrawRing(
+        center,
+        inner + 1.0f,
+        inner + 3.0f,
+        center_angle - half_angle,
+        center_angle + half_angle,
+        24,
+        Fade(YELLOW, 0.9f * fade));
+
+    /* Edge that sweeps across the arc. */
+    float edge_angle =
+        (center_angle - half_angle +
+         2.0f * half_angle * progress) *
+        DEG2RAD;
+
+    float edge_x = cosf(edge_angle);
+    float edge_y = sinf(edge_angle);
+
+    DrawLineEx(
+        (Vector2){
+            player.x + edge_x * inner,
+            player.y + edge_y * inner},
+        (Vector2){
+            player.x + edge_x * (outer + 8.0f),
+            player.y + edge_y * (outer + 8.0f)},
+        5.0f,
+        Fade(WHITE, fade));
+
+    /* Spark at the tip of the sweep. */
+    DrawCircle(
+        (int)(player.x + edge_x * (outer + 8.0f)),
+        (int)(player.y + edge_y * (outer + 8.0f)),
+        4.0f,
+        Fade(YELLOW, fade));
 }
 
 /*
@@ -1023,41 +1252,7 @@ void Player_Render(void)
     /*
      * Small dark connector.
      */
-    DrawLineEx(
-        (Vector2){
-            player.x + 12.0f,
-            player.y},
-        (Vector2){
-            player.x + 19.0f,
-            player.y},
-        5.0f,
-        Fade(
-            BLACK,
-            0.35f));
-
-    /*
-     * Bright direction marker.
-     */
-    DrawCircle(
-        (int)player.x + 11,
-        (int)player.y,
-        4.5f,
-        PLAYER_COLOR_LIGHT);
-
-    /*
-     * Tiny weapon-direction tip.
-     */
-    DrawTriangle(
-        (Vector2){
-            player.x + 18.0f,
-            player.y},
-        (Vector2){
-            player.x + 13.0f,
-            player.y - 3.5f},
-        (Vector2){
-            player.x + 13.0f,
-            player.y + 3.5f},
-        WHITE);
+    Player_RenderFacingMarker();
 
     /*
      * -----------------------------------------------------
@@ -1070,7 +1265,7 @@ void Player_Render(void)
     {
         float damage_progress =
             player.damage_timer /
-            0.75f;
+            BAL_PLAYER_DAMAGE_IMMUNITY;
 
         if (damage_progress < 0.0f)
             damage_progress = 0.0f;
@@ -1159,187 +1354,7 @@ void Player_Render(void)
      * of the 0.35 second attack cooldown.
      */
 
-    if (player.attack_timer >
-        player.attack_cooldown - 0.12f)
-    {
-        float attack_progress =
-            1.0f -
-            ((
-                 player.attack_timer -
-                 (player.attack_cooldown -
-                  0.12f)) /
-             0.12f);
-
-        if (attack_progress < 0.0f)
-            attack_progress = 0.0f;
-
-        if (attack_progress > 1.0f)
-            attack_progress = 1.0f;
-
-        /*
-         * -------------------------------------------------
-         * Attack Glow
-         * -------------------------------------------------
-         */
-
-        float glow_radius =
-            35.0f +
-            attack_progress * 8.0f;
-
-        DrawCircle(
-            (int)player.x + 32,
-            (int)player.y,
-            glow_radius * 0.55f,
-            Fade(
-                PLAYER_ATTACK_GLOW,
-                0.10f));
-
-        /*
-         * -------------------------------------------------
-         * Attack Arc
-         * -------------------------------------------------
-         */
-
-        float inner_radius =
-            22.0f +
-            attack_progress * 3.0f;
-
-        float outer_radius =
-            34.0f +
-            attack_progress * 10.0f;
-
-        /*
-         * Outer soft arc.
-         */
-        DrawRing(
-            (Vector2){
-                player.x,
-                player.y},
-            inner_radius - 2.0f,
-            outer_radius + 3.0f,
-            300.0f,
-            60.0f,
-            18,
-            Fade(
-                PLAYER_ATTACK_GLOW,
-                0.25f));
-
-        /*
-         * Main orange attack arc.
-         */
-        DrawRing(
-            (Vector2){
-                player.x,
-                player.y},
-            inner_radius,
-            outer_radius,
-            300.0f,
-            60.0f,
-            18,
-            Fade(
-                PLAYER_ATTACK_COLOR,
-                0.92f));
-
-        /*
-         * Bright inner edge.
-         */
-        DrawRing(
-            (Vector2){
-                player.x,
-                player.y},
-            inner_radius + 1.0f,
-            inner_radius + 3.0f,
-            300.0f,
-            60.0f,
-            18,
-            Fade(
-                YELLOW,
-                0.90f));
-
-        /*
-         * -------------------------------------------------
-         * Slash Lines
-         * -------------------------------------------------
-         */
-
-        float slash_length =
-            PLAYER_ATTACK_RANGE +
-            8.0f;
-
-        /*
-         * Main white slash.
-         */
-        DrawLineEx(
-            (Vector2){
-                player.x + 16.0f,
-                player.y - 13.0f},
-            (Vector2){
-                player.x + slash_length,
-                player.y - 3.0f},
-            7.0f,
-            WHITE);
-
-        /*
-         * Orange secondary edge.
-         */
-        DrawLineEx(
-            (Vector2){
-                player.x + 19.0f,
-                player.y + 7.0f},
-            (Vector2){
-                player.x + slash_length - 2.0f,
-                player.y + 13.0f},
-            4.0f,
-            PLAYER_ATTACK_COLOR);
-
-        /*
-         * -------------------------------------------------
-         * Impact Point
-         * -------------------------------------------------
-         */
-
-        int impact_x =
-            (int)player.x +
-            (int)slash_length;
-
-        int impact_y =
-            (int)player.y + 4;
-
-        DrawCircle(
-            impact_x,
-            impact_y,
-            8.0f,
-            Fade(
-                YELLOW,
-                0.20f));
-
-        DrawCircle(
-            impact_x,
-            impact_y,
-            5.0f,
-            YELLOW);
-
-        DrawCircle(
-            impact_x - 1,
-            impact_y - 1,
-            2.0f,
-            WHITE);
-
-        /*
-         * Small spark.
-         */
-        DrawCircle(
-            impact_x - 5,
-            impact_y - 8,
-            2.5f,
-            WHITE);
-
-        DrawCircle(
-            impact_x + 3,
-            impact_y + 7,
-            2.0f,
-            PLAYER_ATTACK_GLOW);
-    }
+    Player_RenderAttackSwing();
 }
 
 /*
@@ -1381,6 +1396,14 @@ void Player_TakeDamage(int damage)
 
     if (player.health <= 0)
         return;
+
+    /*
+     * Armor blocks part of the damage.
+     */
+    damage =
+        Equipment_ReduceDamage(
+            &player.inventory,
+            damage);
 
     player.health -= damage;
 
@@ -1447,7 +1470,7 @@ void Player_TakeDamage(int damage)
     /*
      * Prevent damage every frame.
      */
-    player.damage_timer = 0.75f;
+    player.damage_timer = BAL_PLAYER_DAMAGE_IMMUNITY;
 }
 
 bool Player_IsDead(void)

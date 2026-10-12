@@ -9,11 +9,19 @@
 #include "audio.h"
 #include "ui.h"
 #include "effects.h"
+#include "dungeon.h"
+#include "game.h"
+#include "rng.h"
+#include "balance.h"
+#include "inventory.h"
 
 #include <math.h>
 #include <stddef.h>
 
 static Enemy enemies[MAX_ENEMIES];
+
+/* Random numbers for potion drops. */
+static Rng drop_rng = {1u};
 
 #define NORMAL_ENEMY_RADIUS 20.0f
 #define BOSS_RADIUS 28.0f
@@ -48,6 +56,42 @@ static float enemy_death_effect_y[MAX_ENEMIES];
 static float enemy_death_effect_radius[MAX_ENEMIES];
 
 static bool enemy_death_effect_boss[MAX_ENEMIES];
+
+/*
+ * Each enemy type has its own health, speed and recovery time.
+ * The numbers live in balance.h.
+ */
+static void Enemy_ApplyArchetypeStats(
+    int index)
+{
+    Enemy *enemy =
+        &enemies[index];
+
+    switch (enemy->adaptive_type)
+    {
+    case ADAPTIVE_AI_GUARDIAN:
+        enemy->max_health = BAL_GUARDIAN_HEALTH;
+        enemy->speed = BAL_GUARDIAN_SPEED;
+        enemy->attack_cooldown = BAL_GUARDIAN_COOLDOWN;
+        break;
+
+    case ADAPTIVE_AI_ASSASSIN:
+        enemy->max_health = BAL_ASSASSIN_HEALTH;
+        enemy->speed = BAL_ASSASSIN_SPEED;
+        enemy->attack_cooldown = BAL_ASSASSIN_COOLDOWN;
+        break;
+
+    case ADAPTIVE_AI_HUNTER:
+    default:
+        enemy->max_health = BAL_HUNTER_HEALTH;
+        enemy->speed = BAL_HUNTER_SPEED;
+        enemy->attack_cooldown = BAL_HUNTER_COOLDOWN;
+        break;
+    }
+
+    enemy->health =
+        enemy->max_health;
+}
 
 /*
  * ---------------------------------------------------------
@@ -188,6 +232,8 @@ static void Enemy_Create(
 
     enemy_death_effect_boss[index] =
         false;
+
+    Enemy_ApplyArchetypeStats(index);
 }
 
 /*
@@ -224,10 +270,10 @@ static void Enemy_ConfigureBoss(
         150.0f;
 
     enemies[index].max_health =
-        500;
+        BAL_BOSS_HEALTH;
 
     enemies[index].health =
-        500;
+        BAL_BOSS_HEALTH;
 
     enemies[index].radius =
         BOSS_RADIUS;
@@ -290,151 +336,104 @@ static void Enemy_ConfigureBoss(
  * ---------------------------------------------------------
  */
 
-static bool Enemy_FindFloorPosition(
-    float avoid_x,
-    float avoid_y,
-    float minimum_distance,
+/*
+ * ---------------------------------------------------------
+ * Room-Based Spawning
+ * ---------------------------------------------------------
+ *
+ * One enemy per room (never the player's room), and the
+ * boss in the room farthest from the player through the
+ * dungeon graph.
+ */
+
+#define ENEMY_SPAWN_PLAYER_DISTANCE 260.0f
+#define ENEMY_SPAWN_SPACING 80.0f
+#define ENEMY_SPAWN_ATTEMPTS 60
+#define MAX_NORMAL_ENEMIES 10
+
+static bool Enemy_PickPositionInRoom(
+    const DungeonRoom *room,
     float radius,
+    Rng *rng,
     float *result_x,
     float *result_y)
 {
-    if (result_x == NULL ||
-        result_y == NULL)
-    {
-        return false;
-    }
-
     Player *player =
         Player_Get();
 
-    float minimum_distance_squared =
-        minimum_distance *
-        minimum_distance;
-
-    /*
-     * Enemies must never spawn near the player.
-     *
-     * First try a comfortable distance (farther than the
-     * enemy detection range). If the map has no such
-     * spot, relax it once rather than failing to spawn.
-     */
-    const float player_distances[] =
-        {
-            ENEMY_SPAWN_PLAYER_SAFE_DISTANCE,
-            ENEMY_SPAWN_PLAYER_MIN_DISTANCE};
-
-    for (int pass = 0;
-         pass < 2;
-         pass++)
+    for (int attempt = 0;
+         attempt < ENEMY_SPAWN_ATTEMPTS;
+         attempt++)
     {
-        float player_distance_squared =
-            player_distances[pass] *
-            player_distances[pass];
+        int tile_x =
+            Rng_Range(
+                rng,
+                room->x + 1,
+                room->x + room->width - 2);
 
-        for (int y = 0;
-             y < MAP_HEIGHT;
-             y++)
+        int tile_y =
+            Rng_Range(
+                rng,
+                room->y + 1,
+                room->y + room->height - 2);
+
+        float world_x =
+            tile_x * TILE_SIZE +
+            TILE_SIZE * 0.5f;
+
+        float world_y =
+            tile_y * TILE_SIZE +
+            TILE_SIZE * 0.5f;
+
+        if (!Collision_CanMove(
+                world_x,
+                world_y,
+                radius))
         {
-            for (int x = 0;
-                 x < MAP_WIDTH;
-                 x++)
+            continue;
+        }
+
+        if (player != NULL)
+        {
+            float dx = world_x - player->x;
+            float dy = world_y - player->y;
+
+            if (dx * dx + dy * dy <
+                ENEMY_SPAWN_PLAYER_DISTANCE *
+                    ENEMY_SPAWN_PLAYER_DISTANCE)
             {
-                if (TileMap_GetTile(
-                        x,
-                        y) != TILE_FLOOR)
-                {
-                    continue;
-                }
-
-                float world_x =
-                    x * TILE_SIZE +
-                    TILE_SIZE * 0.5f;
-
-                float world_y =
-                    y * TILE_SIZE +
-                    TILE_SIZE * 0.5f;
-
-                /*
-                 * Distance from the supplied position.
-                 */
-                float dx =
-                    world_x - avoid_x;
-
-                float dy =
-                    world_y - avoid_y;
-
-                if (dx * dx + dy * dy <
-                    minimum_distance_squared)
-                {
-                    continue;
-                }
-
-                /*
-                 * Distance from the player.
-                 */
-                if (player != NULL)
-                {
-                    float player_dx =
-                        world_x - player->x;
-
-                    float player_dy =
-                        world_y - player->y;
-
-                    if (player_dx * player_dx +
-                            player_dy * player_dy <
-                        player_distance_squared)
-                    {
-                        continue;
-                    }
-                }
-
-                /*
-                 * Distance from every enemy already spawned.
-                 */
-                bool too_close_to_enemy = false;
-
-                for (int i = 0;
-                     i < MAX_ENEMIES;
-                     i++)
-                {
-                    if (!enemies[i].active)
-                        continue;
-
-                    float enemy_dx =
-                        world_x - enemies[i].x;
-
-                    float enemy_dy =
-                        world_y - enemies[i].y;
-
-                    if (enemy_dx * enemy_dx +
-                            enemy_dy * enemy_dy <
-                        minimum_distance_squared)
-                    {
-                        too_close_to_enemy = true;
-                        break;
-                    }
-                }
-
-                if (too_close_to_enemy)
-                    continue;
-
-                /*
-                 * The complete enemy circle must fit.
-                 */
-                if (!Collision_CanMove(
-                        world_x,
-                        world_y,
-                        radius))
-                {
-                    continue;
-                }
-
-                *result_x = world_x;
-                *result_y = world_y;
-
-                return true;
+                continue;
             }
         }
+
+        bool too_close = false;
+
+        for (int i = 0;
+             i < MAX_ENEMIES;
+             i++)
+        {
+            if (!enemies[i].active)
+                continue;
+
+            float dx = world_x - enemies[i].x;
+            float dy = world_y - enemies[i].y;
+
+            if (dx * dx + dy * dy <
+                ENEMY_SPAWN_SPACING *
+                    ENEMY_SPAWN_SPACING)
+            {
+                too_close = true;
+                break;
+            }
+        }
+
+        if (too_close)
+            continue;
+
+        *result_x = world_x;
+        *result_y = world_y;
+
+        return true;
     }
 
     return false;
@@ -448,7 +447,6 @@ static bool Enemy_FindFloorPosition(
 
 void Enemy_Init(void)
 {
-
     EnemyFSM_Reset();
 
     /*
@@ -479,131 +477,141 @@ void Enemy_Init(void)
             false;
     }
 
-    /*
-     * Get the player's generated spawn position.
-     */
-    Player *player =
-        Player_Get();
+    const Dungeon *dungeon =
+        Game_GetDungeon();
 
-    float player_x =
-        player->x;
+    Rng_Seed(
+        &drop_rng,
+        (dungeon != NULL ? dungeon->seed : 1u) ^ 0xD20Fu);
 
-    float player_y =
-        player->y;
-
-    float spawn_x;
-    float spawn_y;
-
-    /*
-     * -----------------------------------------------------
-     * Enemy 0 - Hunter
-     * -----------------------------------------------------
-     */
-    if (Enemy_FindFloorPosition(
-            player_x,
-            player_y,
-            250.0f,
-            NORMAL_ENEMY_RADIUS,
-            &spawn_x,
-            &spawn_y))
+    if (dungeon == NULL ||
+        dungeon->room_count < 2)
     {
+        return;
+    }
+
+    /*
+     * The player always spawns in room 0.
+     */
+    const int spawn_room = 0;
+
+    int boss_room =
+        Dungeon_GetFarthestRoom(
+            dungeon,
+            spawn_room);
+
+    /*
+     * The layout is derived from the dungeon seed, so the
+     * same seed always places the same enemies.
+     */
+    Rng rng;
+
+    Rng_Seed(
+        &rng,
+        dungeon->seed ^ 0xA5F00D17u);
+
+    int candidates[MAX_DUNGEON_ROOMS];
+    int candidate_count = 0;
+
+    for (int i = 0;
+         i < dungeon->room_count;
+         i++)
+    {
+        if (i == spawn_room ||
+            i == boss_room)
+        {
+            continue;
+        }
+
+        candidates[candidate_count++] = i;
+    }
+
+    /*
+     * Shuffle, so which rooms are used varies per seed.
+     */
+    for (int i = candidate_count - 1;
+         i > 0;
+         i--)
+    {
+        int j =
+            Rng_Range(&rng, 0, i);
+
+        int temp = candidates[i];
+        candidates[i] = candidates[j];
+        candidates[j] = temp;
+    }
+
+    int normal_target = candidate_count;
+
+    if (normal_target > MAX_NORMAL_ENEMIES)
+        normal_target = MAX_NORMAL_ENEMIES;
+
+    /*
+     * Normal enemies.
+     */
+    int next_slot = 0;
+
+    for (int i = 0;
+         i < normal_target;
+         i++)
+    {
+        float x;
+        float y;
+
+        if (!Enemy_PickPositionInRoom(
+                &dungeon->rooms[candidates[i]],
+                NORMAL_ENEMY_RADIUS,
+                &rng,
+                &x,
+                &y))
+        {
+            continue;
+        }
+
         Enemy_Create(
-            0,
-            spawn_x,
-            spawn_y);
+            next_slot,
+            x,
+            y);
+
+        next_slot++;
     }
 
     /*
-     * -----------------------------------------------------
-     * Enemy 1 - Guardian
-     * -----------------------------------------------------
+     * Boss, in the farthest room.
      */
-    float enemy0_x = player_x;
-    float enemy0_y = player_y;
-
-    if (enemies[0].active)
+    if (boss_room >= 0 &&
+        boss_room != spawn_room &&
+        next_slot < MAX_ENEMIES)
     {
-        enemy0_x = enemies[0].x;
-        enemy0_y = enemies[0].y;
-    }
+        const DungeonRoom *room =
+            &dungeon->rooms[boss_room];
 
-    if (Enemy_FindFloorPosition(
-            enemy0_x,
-            enemy0_y,
-            200.0f,
-            NORMAL_ENEMY_RADIUS,
-            &spawn_x,
-            &spawn_y))
-    {
+        float x;
+        float y;
+
+        if (!Enemy_PickPositionInRoom(
+                room,
+                BOSS_RADIUS,
+                &rng,
+                &x,
+                &y))
+        {
+            x =
+                room->center_x * TILE_SIZE +
+                TILE_SIZE * 0.5f;
+
+            y =
+                room->center_y * TILE_SIZE +
+                TILE_SIZE * 0.5f;
+        }
+
         Enemy_Create(
-            1,
-            spawn_x,
-            spawn_y);
-    }
-
-    /*
-     * -----------------------------------------------------
-     * Enemy 2 - Assassin
-     * -----------------------------------------------------
-     */
-    float enemy1_x = player_x;
-    float enemy1_y = player_y;
-
-    if (enemies[1].active)
-    {
-        enemy1_x = enemies[1].x;
-        enemy1_y = enemies[1].y;
-    }
-
-    if (Enemy_FindFloorPosition(
-            enemy1_x,
-            enemy1_y,
-            200.0f,
-            NORMAL_ENEMY_RADIUS,
-            &spawn_x,
-            &spawn_y))
-    {
-        Enemy_Create(
-            2,
-            spawn_x,
-            spawn_y);
-    }
-
-    /*
-     * -----------------------------------------------------
-     * Boss
-     * -----------------------------------------------------
-     */
-    float boss_avoid_x =
-        player_x;
-
-    float boss_avoid_y =
-        player_y;
-
-    if (enemies[2].active)
-    {
-        boss_avoid_x =
-            enemies[2].x;
-
-        boss_avoid_y =
-            enemies[2].y;
-    }
-
-    if (Enemy_FindFloorPosition(
-            boss_avoid_x,
-            boss_avoid_y,
-            350.0f,
-            BOSS_RADIUS,
-            &spawn_x,
-            &spawn_y))
-    {
-        Enemy_Create(
-            3,
-            spawn_x,
-            spawn_y);
+            next_slot,
+            x,
+            y);
 
         Enemy_ConfigureBoss(
-            3);
+            next_slot);
     }
 }
 
@@ -1813,6 +1821,48 @@ static void Enemy_RenderAggression(
     }
 }
 
+/*
+ * A dashed cyan ring: the personal space a boss keeps
+ * around itself against a close-range fighter.
+ */
+static void Enemy_RenderPersonalSpace(
+    const Enemy *enemy,
+    float pulse)
+{
+    Color color = (Color){90, 200, 255, 255};
+
+    float radius = BAL_BOSS_KEEP_DISTANCE;
+    float alpha = 0.40f + 0.35f * pulse;
+    float spin = (float)GetTime() * 0.6f;
+
+    const int segments = 28;
+
+    for (int i = 0; i < segments; i += 2)
+    {
+        float a1 =
+            (float)i / (float)segments * 2.0f * PI + spin;
+
+        float a2 =
+            (float)(i + 1) / (float)segments * 2.0f * PI + spin;
+
+        DrawLineEx(
+            (Vector2){
+                enemy->x + cosf(a1) * radius,
+                enemy->y + sinf(a1) * radius},
+            (Vector2){
+                enemy->x + cosf(a2) * radius,
+                enemy->y + sinf(a2) * radius},
+            3.0f,
+            Fade(color, alpha));
+    }
+
+    DrawCircleLines(
+        (int)enemy->x,
+        (int)enemy->y,
+        enemy->radius + 5.0f + pulse * 2.0f,
+        Fade(color, 0.5f));
+}
+
 static void Enemy_RenderAdaptiveCue(Enemy *enemy)
 {
     if (enemy->state == ENEMY_STATE_DEAD)
@@ -1838,6 +1888,14 @@ static void Enemy_RenderAdaptiveCue(Enemy *enemy)
     {
         if (enemy->state != ENEMY_STATE_IDLE)
             Enemy_RenderAggression(enemy, pulse);
+
+        return;
+    }
+
+    if (decision == ADAPTIVE_DECISION_KEEP_DISTANCE)
+    {
+        if (enemy->state != ENEMY_STATE_IDLE)
+            Enemy_RenderPersonalSpace(enemy, pulse);
 
         return;
     }
@@ -1935,6 +1993,99 @@ static void Enemy_RenderAdaptiveCue(Enemy *enemy)
 
 /*
  * ---------------------------------------------------------
+ * Attack Warning
+ * ---------------------------------------------------------
+ *
+ * While an enemy winds up, the zone it is about to hit fills
+ * up. The zone drawn is the real one, so a dodge can be timed.
+ */
+static void Enemy_RenderWindup(
+    const Enemy *enemy,
+    int index)
+{
+    float progress = 0.0f;
+
+    if (enemy->state == ENEMY_STATE_DEAD ||
+        !EnemyFSM_GetWindup(index, &progress))
+    {
+        return;
+    }
+
+    float radius =
+        EnemyFSM_GetWindupRadius(enemy);
+
+    bool special =
+        enemy->is_boss &&
+        enemy->boss_state == BOSS_STATE_SPECIAL;
+
+    Color base =
+        special
+            ? (Color){255, 150, 40, 255}
+            : (Color){255, 60, 60, 255};
+
+    /*
+     * Flash just before the hit lands.
+     */
+    bool flash =
+        progress > 0.80f &&
+        ((int)(GetTime() * 30.0) % 2 == 0);
+
+    Color color =
+        flash
+            ? WHITE
+            : base;
+
+    int x = (int)enemy->x;
+    int y = (int)enemy->y;
+
+    /* The danger zone. */
+    DrawCircle(
+        x, y, radius,
+        Fade(base, 0.10f + 0.10f * progress));
+
+    /* Fills up to the edge as the hit gets closer. */
+    DrawCircle(
+        x, y, radius * progress,
+        Fade(color, 0.22f + 0.30f * progress));
+
+    DrawCircleLines(
+        x, y, radius,
+        Fade(color, 0.55f + 0.40f * progress));
+
+    DrawCircleLines(
+        x, y, radius - 1.0f,
+        Fade(color, 0.30f));
+
+    /* An exclamation mark when the wind-up begins. */
+    if (progress < 0.5f)
+    {
+        int width =
+            UI_NumberWidth("!", 22);
+
+        int mark_x =
+            x - width / 2;
+
+        int mark_y =
+            (int)(enemy->y - enemy->radius) - 52;
+
+        UI_Number(
+            "!",
+            mark_x + 1,
+            mark_y + 1,
+            22,
+            Fade(BLACK, 0.8f));
+
+        UI_Number(
+            "!",
+            mark_x,
+            mark_y,
+            22,
+            color);
+    }
+}
+
+/*
+ * ---------------------------------------------------------
  * Enemy Rendering
  * ---------------------------------------------------------
  */
@@ -1954,27 +2105,13 @@ void Enemy_Render(void)
         if (!enemy->active)
             continue;
 
+        Enemy_RenderWindup(enemy, i);
+
         /*
          * -------------------------------------------------
          * Enemy body
          * -------------------------------------------------
          */
-        if (enemy->is_boss)
-        {
-            Enemy_RenderBossBody(
-                enemy);
-        }
-        else
-        {
-            Color body_color =
-                Enemy_GetArchetypeColor(
-                    enemy->adaptive_type);
-
-            Enemy_RenderNormalBody(
-                enemy,
-                body_color);
-        }
-
         if (enemy->is_boss)
         {
             Enemy_RenderBossBody(
@@ -2235,6 +2372,78 @@ int Enemy_GetCount(void)
 }
 
 /*
+ * Strong enemies sometimes drop gear:
+ *   Hunters and Assassins -> Iron Sword
+ *   Guardians             -> Iron Armor
+ *
+ * Gear is only dropped if the player does not own it yet
+ * and it is not already lying on the floor.
+ */
+static void Enemy_TryDropGear(
+    const Enemy *enemy)
+{
+    Player *player =
+        Player_Get();
+
+    if (player == NULL)
+        return;
+
+    ItemId gear = ITEM_ID_NONE;
+    float chance = 0.0f;
+
+    switch (enemy->adaptive_type)
+    {
+    case ADAPTIVE_AI_GUARDIAN:
+        gear = ITEM_ID_IRON_ARMOR;
+        chance = BAL_GUARDIAN_ARMOR_DROP_CHANCE;
+        break;
+
+    case ADAPTIVE_AI_HUNTER:
+        gear = ITEM_ID_IRON_SWORD;
+        chance = BAL_HUNTER_SWORD_DROP_CHANCE;
+        break;
+
+    case ADAPTIVE_AI_ASSASSIN:
+        gear = ITEM_ID_IRON_SWORD;
+        chance = BAL_ASSASSIN_SWORD_DROP_CHANCE;
+        break;
+
+    default:
+        return;
+    }
+
+    if (Inventory_GetQuantity(
+            &player->inventory,
+            gear) > 0)
+    {
+        return;
+    }
+
+    for (int i = 0;
+         i < ITEM_DROP_MAX;
+         i++)
+    {
+        const ItemDrop *drop =
+            ItemDrop_Get(i);
+
+        if (drop != NULL &&
+            drop->item_id == gear)
+        {
+            return;
+        }
+    }
+
+    if (Rng_Float(&drop_rng) < chance)
+    {
+        ItemDrop_Spawn(
+            enemy->x + 18.0f,
+            enemy->y - 6.0f,
+            gear,
+            1);
+    }
+}
+
+/*
  * ---------------------------------------------------------
  * Enemy Damage
  * ---------------------------------------------------------
@@ -2345,11 +2554,67 @@ void Enemy_TakeDamage(
          * Drop a health potion at the
          * enemy's death position.
          */
-        ItemDrop_Spawn(
-            enemy->x,
-            enemy->y,
-            ITEM_ID_HEALTH_POTION,
-            1);
+        /*
+         * Normal enemies sometimes drop a potion.
+         * The boss always drops several.
+         */
+        if (enemy->is_boss)
+        {
+            for (int drop = 0;
+                 drop < BAL_BOSS_POTION_DROPS;
+                 drop++)
+            {
+                ItemDrop_Spawn(
+                    enemy->x +
+                        (drop % 2 == 0 ? -16.0f : 16.0f),
+                    enemy->y,
+                    ITEM_ID_HEALTH_POTION,
+                    1);
+            }
+        }
+        else
+        {
+            /*
+             * Base chance, raised when the player is out of
+             * potions or low on health.
+             */
+            float chance =
+                BAL_ENEMY_POTION_DROP_CHANCE;
+
+            Player *player =
+                Player_Get();
+
+            if (player != NULL)
+            {
+                if (Inventory_GetQuantity(
+                        &player->inventory,
+                        ITEM_ID_HEALTH_POTION) == 0)
+                {
+                    chance +=
+                        BAL_POTION_DROP_BONUS_NO_POTIONS;
+                }
+
+                if (player->health * 100 <=
+                    PLAYER_MAX_HEALTH *
+                        BAL_POTION_LOW_HEALTH_PERCENT)
+                {
+                    chance +=
+                        BAL_POTION_DROP_BONUS_LOW_HEALTH;
+                }
+            }
+
+            if (Rng_Float(&drop_rng) < chance)
+            {
+                ItemDrop_Spawn(
+                    enemy->x,
+                    enemy->y,
+                    ITEM_ID_HEALTH_POTION,
+                    1);
+            }
+        }
+
+        if (!enemy->is_boss)
+            Enemy_TryDropGear(enemy);
 
         return;
     }
