@@ -54,7 +54,12 @@ static float Audio_ClampVolume(float volume)
 static void Audio_ApplyVolume(void)
 {
     SetSoundVolume(player_attack_sound, master_volume);
-    SetSoundVolume(player_damage_sound, master_volume);
+
+    /*
+     * The damage sound file is recorded quieter than the
+     * others, so it is boosted to match.
+     */
+    SetSoundVolume(player_damage_sound, master_volume * 2.0f);
 
     SetSoundVolume(enemy_hit_sound, master_volume);
     SetSoundVolume(enemy_death_sound, master_volume);
